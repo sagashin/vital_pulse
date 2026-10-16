@@ -651,43 +651,107 @@ export function QuickLogModal({
 
                   {/* Analyzed Result Card */}
                   {photoAnalysis && (
-                    <div className="p-4 rounded-2xl bg-slate-950/90 border border-teal-500/40 space-y-3">
+                    <div className="p-4 rounded-2xl bg-slate-950/90 border border-teal-500/40 space-y-3.5">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-white">
-                          {photoAnalysis.description}
-                        </h4>
-                        <span className="text-sm font-black text-amber-300">
-                          {photoAnalysis.calories} kcal
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
+                              photoAnalysis.source === "gemini"
+                                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                            }`}
+                          >
+                            {photoAnalysis.source === "gemini" ? "✨ Gemini Vision 解析" : "⚠️ 推定モード"}
+                          </span>
+                        </div>
+                        <span className="text-xs text-slate-400">タップして直接編集可能</span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                          <span className="block text-[10px] text-slate-400">Protein</span>
-                          <span className="font-bold text-emerald-400">
-                            {photoAnalysis.protein}g
-                          </span>
+                      {/* Editable Meal Title */}
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">料理名・タイトル</label>
+                        <input
+                          type="text"
+                          value={photoAnalysis.description}
+                          onChange={(e) =>
+                            setPhotoAnalysis({ ...photoAnalysis, description: e.target.value })
+                          }
+                          className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white font-bold"
+                        />
+                      </div>
+
+                      {/* Editable Calories and Macros */}
+                      <div className="grid grid-cols-4 gap-2 text-xs">
+                        <div>
+                          <label className="block text-[10px] text-amber-300 mb-1 font-semibold">kcal</label>
+                          <input
+                            type="number"
+                            value={photoAnalysis.calories}
+                            onChange={(e) =>
+                              setPhotoAnalysis({
+                                ...photoAnalysis,
+                                calories: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-amber-300 font-bold"
+                          />
                         </div>
-                        <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                          <span className="block text-[10px] text-slate-400">Fat</span>
-                          <span className="font-bold text-amber-400">
-                            {photoAnalysis.fat}g
-                          </span>
+                        <div>
+                          <label className="block text-[10px] text-emerald-400 mb-1 font-semibold">Protein (g)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={photoAnalysis.protein}
+                            onChange={(e) =>
+                              setPhotoAnalysis({
+                                ...photoAnalysis,
+                                protein: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-emerald-400 font-bold"
+                          />
                         </div>
-                        <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
-                          <span className="block text-[10px] text-slate-400">Carbs</span>
-                          <span className="font-bold text-sky-400">
-                            {photoAnalysis.carbs}g
-                          </span>
+                        <div>
+                          <label className="block text-[10px] text-amber-400 mb-1 font-semibold">Fat (g)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={photoAnalysis.fat}
+                            onChange={(e) =>
+                              setPhotoAnalysis({
+                                ...photoAnalysis,
+                                fat: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-amber-400 font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-sky-400 mb-1 font-semibold">Carbs (g)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={photoAnalysis.carbs}
+                            onChange={(e) =>
+                              setPhotoAnalysis({
+                                ...photoAnalysis,
+                                carbs: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-sky-400 font-bold"
+                          />
                         </div>
                       </div>
 
                       {photoAnalysis.items.length > 0 && (
-                        <div className="space-y-1 text-[11px] text-slate-300">
+                        <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 text-[11px] text-slate-300">
+                          <span className="block text-[10px] text-slate-400 font-semibold mb-1">
+                            検出品目・内訳:
+                          </span>
                           {photoAnalysis.items.map((it, idx) => (
                             <div key={idx} className="flex justify-between">
                               <span>• {it.name}</span>
-                              <span className="text-slate-400">
+                              <span className="text-slate-400 font-mono">
                                 {it.calories}kcal (P:{it.protein}g)
                               </span>
                             </div>
@@ -695,17 +759,23 @@ export function QuickLogModal({
                         </div>
                       )}
 
-                      <p className="text-[11px] text-teal-300/90 leading-relaxed">
+                      <div
+                        className={`p-2.5 rounded-xl text-[11px] leading-relaxed ${
+                          photoAnalysis.source === "gemini"
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-200"
+                            : "bg-amber-500/10 border border-amber-500/20 text-amber-200"
+                        }`}
+                      >
                         {photoAnalysis.confidenceNote}
-                      </p>
+                      </div>
 
                       <button
                         type="button"
                         onClick={handleSaveAnalyzedPhotoMeal}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition"
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-teal-950/50"
                       >
                         <Check className="w-4 h-4" />
-                        この解析結果と写真をIndexedDBに保存
+                        この内容でIndexedDBに保存する
                       </button>
                     </div>
                   )}

@@ -15,6 +15,8 @@ export interface AnalyzedFoodPhotoResult {
     fat: number;
     carbs: number;
   }>;
+  source: "gemini" | "local-estimate";
+  errorMessage?: string;
 }
 
 /**
@@ -22,14 +24,14 @@ export interface AnalyzedFoodPhotoResult {
  */
 export async function fileToCompressedDataUrl(
   file: File,
-  maxWidth = 800
+  maxWidth = 1024
 ): Promise<{ dataUrl: string; base64Data: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, maxWidth / img.width);
+        const scale = Math.min(1, maxWidth / Math.max(img.width, img.height));
         const canvas = document.createElement("canvas");
         canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
@@ -40,7 +42,7 @@ export async function fileToCompressedDataUrl(
         }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         const mimeType = "image/jpeg";
-        const dataUrl = canvas.toDataURL(mimeType, 0.82);
+        const dataUrl = canvas.toDataURL(mimeType, 0.85);
         const base64Data = dataUrl.split(",")[1] ?? "";
         resolve({ dataUrl, base64Data, mimeType });
       };
@@ -54,7 +56,7 @@ export async function fileToCompressedDataUrl(
 
 /**
  * Gemini Multimodal APIを使って料理画像（＋補足テキスト）からカロリー・PFCを構造化JSONで推定する
- * APIキー未設定時はオフライン・スマートビジョン推定（デモ/ローカル推論）に自動フォールバック
+ * API呼び出しの成功/失敗を明示し、失敗時にも理由を表示
  */
 export async function analyzeFoodPhotoWithGemini(params: {
   base64Data: string;
@@ -74,141 +76,141 @@ export async function analyzeFoodPhotoWithGemini(params: {
   } = params;
 
   const trimmedKey = apiKey.trim();
+  let apiErrorMessage = "";
 
-  if (trimmedKey) {
-    try {
-      const prompt = `あなたはプロの管理栄養士AIです。添付された料理・食事の写真${
-        userHint ? `（補足メモ: ${userHint}）` : ""
-      }を解析し、以下のJSONスキーマのみで回答してください。マークダウンのコードブロックは不要です。
+  if (trimmedKey && base64Data) {
+    // 試行するモデル候補（設定値 -> gemini-2.5-flash -> gemini-1.5-flash）
+    const candidateModels = Array.from(
+      new Set([model.trim() || "gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"])
+    );
+
+    for (const targetModel of candidateModels) {
+      try {
+        const prompt = `あなたはプロの管理栄養士AIです。添付された料理・食事の写真${
+          userHint ? `（ユーザー補足メモ: ${userHint}）` : ""
+        }を正確に観察して解析し、必ず以下のJSONスキーマ形式のみで回答してください。マークダウンの\`\`\`jsonブロックなどは一切含めず、純粋なJSON文字列のみを出力してください。
 {
-  "description": "料理全体のわかりやすい日本語タイトル",
+  "description": "写真に写っている料理全体の具体的な日本語タイトル（例: 醤油ラーメン・半チャーハンセット、鶏むね肉の照り焼きと白米 など）",
   "mealType": "breakfast" | "lunch" | "dinner" | "snack",
   "calories": 数値(kcal),
   "protein": 数値(g),
   "fat": 数値(g),
   "carbs": 数値(g),
-  "confidenceNote": "栄養バランスのワンポイント講評（1文）",
+  "confidenceNote": "写真から判定した食材と栄養バランスの講評（1文）",
   "items": [
-    { "name": "品目名", "calories": 数値, "protein": 数値, "fat": 数値, "carbs": 数値 }
+    { "name": "写真に見える個別の品目名", "calories": 数値, "protein": 数値, "fat": 数値, "carbs": 数値 }
   ]
 }`;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
-        trimmedKey
-      )}`;
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(
+          trimmedKey
+        )}`;
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                {
-                  inlineData: {
-                    mimeType,
-                    data: base64Data,
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  {
+                    inlineData: {
+                      mimeType: mimeType || "image/jpeg",
+                      data: base64Data,
+                    },
                   },
-                },
-              ],
+                ],
+              },
+            ],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.1,
             },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-          },
-        }),
-      });
+          }),
+        });
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Gemini API Error (${res.status}): ${errText}`);
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status} (${targetModel}): ${errText}`);
+        }
+
+        const json = await res.json();
+        const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
+        const cleaned = rawText
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/```$/i, "")
+          .trim();
+        const parsed = JSON.parse(cleaned);
+
+        return {
+          description: parsed.description || "AI画像解析ミール",
+          mealType: parsed.mealType || "lunch",
+          calories: Math.round(Number(parsed.calories) || 520),
+          protein: Number(Number(parsed.protein || 28).toFixed(1)),
+          fat: Number(Number(parsed.fat || 15).toFixed(1)),
+          carbs: Number(Number(parsed.carbs || 60).toFixed(1)),
+          confidenceNote:
+            parsed.confidenceNote ||
+            `Gemini (${targetModel}) のマルチモーダル画像解析により、写真の料理を検出しました。`,
+          items: Array.isArray(parsed.items) ? parsed.items : [],
+          source: "gemini",
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`Gemini API attempt with ${targetModel} failed:`, msg);
+        apiErrorMessage = msg;
       }
-
-      const json = await res.json();
-      const rawText =
-        json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-      const cleaned = rawText
-        .replace(/^```json\s*/i, "")
-        .replace(/```$/i, "")
-        .trim();
-      const parsed = JSON.parse(cleaned);
-
-      return {
-        description: parsed.description || "AI画像解析ミール",
-        mealType: parsed.mealType || "lunch",
-        calories: Math.round(Number(parsed.calories) || 560),
-        protein: Number(Number(parsed.protein || 34).toFixed(1)),
-        fat: Number(Number(parsed.fat || 16).toFixed(1)),
-        carbs: Number(Number(parsed.carbs || 62).toFixed(1)),
-        confidenceNote:
-          parsed.confidenceNote ||
-          "Gemini Vision マルチモーダル解析によりPFCバランスを算出しました。",
-        items: Array.isArray(parsed.items) ? parsed.items : [],
-      };
-    } catch (err) {
-      console.warn("Gemini API call failed, falling back to local smart estimator:", err);
     }
   }
 
-  // ローカル・スマートフォールバック（APIキー未設定時でも即座にリアルな画像解析体験を提供）
-  const combinedHint = `${fileName} ${userHint}`.toLowerCase();
+  // APIキー未入力、または通信エラー時のフォールバック処理
   const hour = new Date().getHours();
   const defaultMealType: MealType =
     hour < 10 ? "breakfast" : hour < 15 ? "lunch" : hour < 21 ? "dinner" : "snack";
 
-  if (combinedHint.includes("サラダ") || combinedHint.includes("鶏") || combinedHint.includes("chicken")) {
-    return {
-      description: "グリルチキン＆アボカド・パワーサラダボウル",
-      mealType: defaultMealType,
-      calories: 540,
-      protein: 44,
-      fat: 18,
-      carbs: 46,
-      confidenceNote:
-        "高タンパク・低GIな理想的ボディメイク食です（ローカルAIビジョン推定 / 設定画面でGemini APIキーを登録すると実画像AI通信に切り替わります）。",
-      items: [
-        { name: "ハーブ鶏むね肉グリル (160g)", calories: 250, protein: 36, fat: 5, carbs: 1 },
-        { name: "アボカド＆グリーンサラダ", calories: 140, protein: 3, fat: 11, carbs: 8 },
-        { name: "キヌア＆玄米ベース", calories: 150, protein: 5, fat: 2, carbs: 37 },
-      ],
-    };
+  // ユーザーの補足メモがある場合は、メモのキーワードから計算
+  const hintText = (userHint || fileName).trim();
+  const cleanDesc = hintText ? hintText : "スマート推定プレート";
+
+  let estCal = 550;
+  let estP = 32;
+  let estF = 16;
+  let estC = 62;
+
+  const lower = hintText.toLowerCase();
+  if (lower.includes("ラーメン") || lower.includes("そば") || lower.includes("うどん") || lower.includes("麺")) {
+    estCal = 650;
+    estP = 22;
+    estF = 20;
+    estC = 88;
+  } else if (lower.includes("肉") || lower.includes("ステーキ") || lower.includes("牛") || lower.includes("チキン")) {
+    estCal = 620;
+    estP = 46;
+    estF = 24;
+    estC = 48;
+  } else if (lower.includes("サラダ") || lower.includes("野菜")) {
+    estCal = 380;
+    estP = 24;
+    estF = 12;
+    estC = 38;
   }
 
-  if (combinedHint.includes("魚") || combinedHint.includes("鮭") || combinedHint.includes("定食") || combinedHint.includes("和食")) {
-    return {
-      description: "焼き鮭と納豆・玄米の和食バランス膳",
-      mealType: defaultMealType,
-      calories: 590,
-      protein: 38,
-      fat: 16,
-      carbs: 68,
-      confidenceNote:
-        "オメガ3脂肪酸と発酵食品が豊富な高Readiness和食メニューです。",
-      items: [
-        { name: "銀鮭の塩焼き", calories: 210, protein: 22, fat: 12, carbs: 0.5 },
-        { name: "極小粒納豆＆温泉卵", calories: 160, protein: 12, fat: 8, carbs: 7.5 },
-        { name: "玄米ご飯 (160g) ＆ あおさ味噌汁", calories: 220, protein: 4, fat: 1, carbs: 60 },
-      ],
-    };
-  }
+  const reason = !trimmedKey
+    ? "Gemini APIキーが設定されていないため、写真解析が行えませんでした。「目標・AI設定」からAPIキーを入力してください。"
+    : `Gemini API通信エラー (${apiErrorMessage || "モデル接続失敗"}) が発生したため、写真の解析に失敗しました。キーの権限またはモデル設定をご確認ください。`;
 
   return {
-    description: userHint.trim()
-      ? `${userHint.trim()}（AIマルチモーダル栄養推定）`
-      : "高タンパク彩りプレート（グリルミート・雑穀米・温野菜）",
+    description: cleanDesc,
     mealType: defaultMealType,
-    calories: 610,
-    protein: 41,
-    fat: 17,
-    carbs: 66,
-    confidenceNote:
-      "P:F:C比率が27:25:48と非常に優れたバランスです（設定画面からGemini APIキーを入力するとGemini 2.5 Flash実画像解析が有効になります）。",
-    items: [
-      { name: "メイン・リーンプロテインプレート", calories: 310, protein: 33, fat: 13, carbs: 6 },
-      { name: "雑穀ブレンドライス (150g)", calories: 230, protein: 5, fat: 2, carbs: 50 },
-      { name: "ブロッコリー＆季節の温野菜", calories: 70, protein: 3, fat: 2, carbs: 10 },
-    ],
+    calories: estCal,
+    protein: estP,
+    fat: estF,
+    carbs: estC,
+    confidenceNote: reason,
+    items: [{ name: cleanDesc, calories: estCal, protein: estP, fat: estF, carbs: estC }],
+    source: "local-estimate",
+    errorMessage: !trimmedKey ? undefined : apiErrorMessage,
   };
 }
