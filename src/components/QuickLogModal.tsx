@@ -16,6 +16,7 @@ import {
   Camera,
   Loader2,
   ImagePlus,
+  Calendar,
 } from "lucide-react";
 import { db, calculateReadinessScore, type MealType } from "@/lib/db/schema";
 import { parseNaturalHealthInput, type ParsedVoiceCommand } from "@/lib/voice-parser";
@@ -48,13 +49,15 @@ export function QuickLogModal({
   onOpenAiSettings,
 }: QuickLogModalProps) {
   const [activeTab, setActiveTab] = useState<QuickLogTab>(initialTab);
+  const [recordDate, setRecordDate] = useState<string>(selectedDate);
 
-  // Sync initialTab when opened
+  // Sync initialTab and recordDate when opened
   React.useEffect(() => {
-    if (isOpen && initialTab) {
-      setActiveTab(initialTab);
+    if (isOpen) {
+      if (initialTab) setActiveTab(initialTab);
+      setRecordDate(selectedDate);
     }
-  }, [isOpen, initialTab]);
+  }, [isOpen, initialTab, selectedDate]);
 
   // AI / Voice Smart Input state
   const [smartText, setSmartText] = useState("");
@@ -202,7 +205,7 @@ export function QuickLogModal({
   const handleSaveAnalyzedPhotoMeal = async () => {
     if (!photoAnalysis) return;
     await db.meals.add({
-      date: selectedDate,
+      date: recordDate,
       timestamp: new Date().toISOString(),
       mealType: photoAnalysis.mealType,
       description: photoAnalysis.description,
@@ -215,7 +218,7 @@ export function QuickLogModal({
     setPhotoAnalysis(null);
     setPhotoPreviewUrl("");
     setPhotoHint("");
-    onSuccess(`写真AI解析から「${photoAnalysis.description}」を記録しました！`);
+    onSuccess(`写真AI解析から「${photoAnalysis.description}」(${recordDate})を記録しました！`);
     onClose();
   };
 
@@ -226,7 +229,7 @@ export function QuickLogModal({
     const nowIso = new Date().toISOString();
     for (const cmd of commands) {
       if (cmd.category === "body" && cmd.weightKg) {
-        const existing = await db.bodyMetrics.where("date").equals(selectedDate).first();
+        const existing = await db.bodyMetrics.where("date").equals(recordDate).first();
         if (existing?.id) {
           await db.bodyMetrics.update(existing.id, {
             weightKg: cmd.weightKg,
@@ -234,14 +237,14 @@ export function QuickLogModal({
           });
         } else {
           await db.bodyMetrics.add({
-            date: selectedDate,
+            date: recordDate,
             weightKg: cmd.weightKg,
             bodyFatPercentage: cmd.bodyFatPercentage ?? 17.5,
           });
         }
       } else if (cmd.category === "meal") {
         await db.meals.add({
-          date: selectedDate,
+          date: recordDate,
           timestamp: nowIso,
           mealType: cmd.mealType ?? "lunch",
           description: cmd.mealDescription ?? "AIスマート食事記録",
@@ -252,7 +255,7 @@ export function QuickLogModal({
         });
       } else if (cmd.category === "workout") {
         await db.workouts.add({
-          date: selectedDate,
+          date: recordDate,
           timestamp: nowIso,
           type: cmd.workoutType ?? "ワークアウト",
           durationMinutes: cmd.durationMinutes ?? 30,
@@ -261,7 +264,7 @@ export function QuickLogModal({
           memo: "AI・音声スマート入力から記録",
         });
       } else if (cmd.category === "sleep" && cmd.sleepHours) {
-        const existingSleep = await db.sleepLogs.where("date").equals(selectedDate).first();
+        const existingSleep = await db.sleepLogs.where("date").equals(recordDate).first();
         const quality = cmd.sleepQuality ?? 4;
         if (existingSleep?.id) {
           await db.sleepLogs.update(existingSleep.id, {
@@ -270,7 +273,7 @@ export function QuickLogModal({
           });
         } else {
           await db.sleepLogs.add({
-            date: selectedDate,
+            date: recordDate,
             bedTime: "23:30",
             wakeTime: "07:00",
             durationHours: cmd.sleepHours,
@@ -282,14 +285,14 @@ export function QuickLogModal({
 
     setSmartText("");
     setParsedPreview([]);
-    onSuccess(`${commands.length}件のログをAI自動振り分けで保存しました`);
+    onSuccess(`${commands.length}件のログを${recordDate}に振り分け保存しました`);
     onClose();
   };
 
   const handleSaveMeal = async (e: React.FormEvent) => {
     e.preventDefault();
     await db.meals.add({
-      date: selectedDate,
+      date: recordDate,
       timestamp: new Date().toISOString(),
       mealType,
       description: mealDesc.trim() || "バランスミール",
@@ -299,13 +302,13 @@ export function QuickLogModal({
       carbs: Number(carbs) || 0,
     });
     setMealDesc("");
-    onSuccess("食事とPFCバランスを記録しました");
+    onSuccess(`食事とPFCバランス(${recordDate})を記録しました`);
     onClose();
   };
 
   const handleSaveBody = async (e: React.FormEvent) => {
     e.preventDefault();
-    const existing = await db.bodyMetrics.where("date").equals(selectedDate).first();
+    const existing = await db.bodyMetrics.where("date").equals(recordDate).first();
     if (existing?.id) {
       await db.bodyMetrics.update(existing.id, {
         weightKg: Number(weightKg),
@@ -313,19 +316,19 @@ export function QuickLogModal({
       });
     } else {
       await db.bodyMetrics.add({
-        date: selectedDate,
+        date: recordDate,
         weightKg: Number(weightKg),
         bodyFatPercentage: Number(bodyFat),
       });
     }
-    onSuccess(`体重 ${weightKg}kg・体脂肪率 ${bodyFat}% を記録しました`);
+    onSuccess(`体重 ${weightKg}kg・体脂肪率 ${bodyFat}% (${recordDate})を記録しました`);
     onClose();
   };
 
   const handleSaveWorkout = async (e: React.FormEvent) => {
     e.preventDefault();
     await db.workouts.add({
-      date: selectedDate,
+      date: recordDate,
       timestamp: new Date().toISOString(),
       type: workoutType.trim() || "ワークアウト",
       durationMinutes: Number(durationMin) || 30,
@@ -334,7 +337,7 @@ export function QuickLogModal({
       memo: workoutMemo,
     });
 
-    const existingAct = await db.activities.where("date").equals(selectedDate).first();
+    const existingAct = await db.activities.where("date").equals(recordDate).first();
     if (existingAct?.id) {
       await db.activities.update(existingAct.id, {
         steps: Number(stepsInput) || existingAct.steps,
@@ -342,21 +345,21 @@ export function QuickLogModal({
       });
     } else {
       await db.activities.add({
-        date: selectedDate,
+        date: recordDate,
         steps: Number(stepsInput) || 8500,
         activeMinutes: Number(durationMin) || 45,
         readinessScore: 84,
       });
     }
 
-    onSuccess("ワークアウトと活動ログを記録しました");
+    onSuccess(`ワークアウトと活動ログ(${recordDate})を記録しました`);
     onClose();
   };
 
   const handleSaveSleep = async (e: React.FormEvent) => {
     e.preventDefault();
     const hours = Number(sleepHours) || 7.5;
-    const existingSleep = await db.sleepLogs.where("date").equals(selectedDate).first();
+    const existingSleep = await db.sleepLogs.where("date").equals(recordDate).first();
     if (existingSleep?.id) {
       await db.sleepLogs.update(existingSleep.id, {
         bedTime,
@@ -366,7 +369,7 @@ export function QuickLogModal({
       });
     } else {
       await db.sleepLogs.add({
-        date: selectedDate,
+        date: recordDate,
         bedTime,
         wakeTime,
         durationHours: hours,
@@ -375,21 +378,21 @@ export function QuickLogModal({
     }
 
     const newReadiness = calculateReadinessScore(hours, sleepQuality, 300, 50);
-    const existingAct = await db.activities.where("date").equals(selectedDate).first();
+    const existingAct = await db.activities.where("date").equals(recordDate).first();
     if (existingAct?.id) {
       await db.activities.update(existingAct.id, {
         readinessScore: newReadiness,
       });
     } else {
       await db.activities.add({
-        date: selectedDate,
+        date: recordDate,
         steps: 8000,
         activeMinutes: 45,
         readinessScore: newReadiness,
       });
     }
 
-    onSuccess(`睡眠ログを記録し、Readinessスコア(${newReadiness})を更新しました`);
+    onSuccess(`睡眠ログ(${recordDate})を記録し、Readinessスコア(${newReadiness})を更新しました`);
     onClose();
   };
 
@@ -412,15 +415,24 @@ export function QuickLogModal({
             transition={{ type: "spring", damping: 26, stiffness: 320 }}
             className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-slate-800/90 shadow-2xl overflow-hidden"
           >
-            {/* Header */}
+            {/* Header with Date Selector */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-800/80">
               <div>
                 <span className="text-xs font-medium uppercase tracking-wider text-emerald-400">
                   Zero-Friction Multimodal Logger
                 </span>
-                <h3 className="text-lg font-bold text-slate-100 mt-0.5">
-                  ライフログの即座記録 ({selectedDate})
-                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <h3 className="text-base font-bold text-slate-100">記録対象日:</h3>
+                  <div className="flex items-center gap-1 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-1">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                    <input
+                      type="date"
+                      value={recordDate}
+                      onChange={(e) => setRecordDate(e.target.value)}
+                      className="bg-transparent text-xs font-mono font-bold text-white focus:outline-none cursor-pointer"
+                    />
+                  </div>
+                </div>
               </div>
               <button
                 onClick={onClose}
