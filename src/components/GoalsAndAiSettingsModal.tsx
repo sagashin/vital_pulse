@@ -10,10 +10,13 @@ import {
   Check,
   Sparkles,
   RotateCcw,
+  UserCheck,
 } from "lucide-react";
 import {
   DEFAULT_USER_SETTINGS,
+  calculateChronologicalAge,
   type UserGoalsAndSettings,
+  type BiologicalSex,
 } from "@/lib/settings";
 
 interface GoalsAndAiSettingsModalProps {
@@ -46,9 +49,14 @@ export function GoalsAndAiSettingsModal({
   const handleResetDefaults = () => {
     setForm({
       ...DEFAULT_USER_SETTINGS,
+      birthDate: form.birthDate,
+      gender: form.gender,
+      heightCm: form.heightCm,
       geminiApiKey: form.geminiApiKey,
     });
   };
+
+  const currentAge = calculateChronologicalAge(form.birthDate);
 
   return (
     <AnimatePresence>
@@ -75,10 +83,10 @@ export function GoalsAndAiSettingsModal({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    パーソナル目標 &amp; Gemini AI設定
+                    プロフィール・目標 &amp; Gemini AI設定
                   </h3>
                   <p className="text-xs text-slate-400">
-                    目標PFC・カロリー・体重・マルチモーダル画像解析キーの設定
+                    生年月日・性別・身長（基礎代謝＆健康年齢算出）・目標PFC設定
                   </p>
                 </div>
               </div>
@@ -91,12 +99,75 @@ export function GoalsAndAiSettingsModal({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Target Body & Activity */}
+              {/* 0. Personal Profile (BirthDate, Age, Gender, Height) */}
               <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-400">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    1. 基本プロフィール（基礎代謝・健康年齢の算出基準）
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                    現在 {currentAge} 歳
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      生年月日 (誕生日)
+                    </label>
+                    <input
+                      type="date"
+                      value={form.birthDate}
+                      onChange={(e) =>
+                        setForm({ ...form, birthDate: e.target.value })
+                      }
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-mono font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      性別 (基礎代謝基準)
+                    </label>
+                    <select
+                      value={form.gender}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          gender: e.target.value as BiologicalSex,
+                        })
+                      }
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-bold"
+                    >
+                      <option value="male">男性 (Male)</option>
+                      <option value="female">女性 (Female)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      身長 (cm)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={form.heightCm}
+                      onChange={(e) =>
+                        setForm({ ...form, heightCm: Number(e.target.value) })
+                      }
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Target Body & Activity */}
+              <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-400">
                     <Target className="w-3.5 h-3.5" />
-                    1. 身体・アクティビティ目標
+                    2. 身体・アクティビティ目標
                   </span>
                   <button
                     type="button"
@@ -172,7 +243,7 @@ export function GoalsAndAiSettingsModal({
               <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400">
                   <Sparkles className="w-3.5 h-3.5" />
-                  2. 1日の目標摂取カロリー &amp; PFCバランス
+                  3. 1日の目標摂取カロリー &amp; PFCバランス
                 </span>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -232,16 +303,14 @@ export function GoalsAndAiSettingsModal({
                 </div>
               </div>
 
-              {/* Gemini Multimodal API Key (Local Storage only) */}
+              {/* Gemini Multimodal API Key */}
               <div className="space-y-3 pt-2 border-t border-slate-800/80">
                 <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-400">
                   <KeyRound className="w-3.5 h-3.5" />
-                  3. Gemini API キー（食事写真のマルチモーダルAI解析用）
+                  4. Gemini API キー（写真＆テキストのAI栄養解析用）
                 </span>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Google AI StudioのAPIキーを入力すると、料理写真のドロップ時に直接{" "}
-                  <code className="text-emerald-300 font-mono">gemini-2.5-flash</code>{" "}
-                  で画像解析しPFCを自動算出します（ブラウザ内のlocalStorageにのみ保存されます。未設定でもローカル推定モードで動作します）。
+                  Google AI StudioのAPIキーを入力すると、料理写真のドロップ時や食事テキスト入力時に最新Flashモデルで自動PFC解析します。
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -255,7 +324,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, geminiApiKey: e.target.value })
                       }
-                      placeholder="未設定時はローカルAI推定に自動フォールバック"
+                      placeholder="未設定時はローカルAI辞書推定に自動フォールバック"
                       className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-xs text-white font-mono"
                     />
                   </div>
@@ -285,7 +354,7 @@ export function GoalsAndAiSettingsModal({
                 className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950/50"
               >
                 <Check className="w-4 h-4" />
-                目標とAI設定を保存する
+                プロフィール・目標・AI設定を保存する
               </button>
             </form>
           </motion.div>

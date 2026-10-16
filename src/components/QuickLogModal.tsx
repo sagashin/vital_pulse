@@ -19,7 +19,12 @@ import {
   Calendar,
 } from "lucide-react";
 import { db, calculateReadinessScore, type MealType } from "@/lib/db/schema";
-import { parseNaturalHealthInput, type ParsedVoiceCommand } from "@/lib/voice-parser";
+import {
+  parseNaturalHealthInput,
+  estimateNutritionFromMealText,
+  estimateMealTextWithGemini,
+  type ParsedVoiceCommand,
+} from "@/lib/voice-parser";
 import {
   analyzeFoodPhotoWithGemini,
   fileToCompressedDataUrl,
@@ -79,6 +84,48 @@ export function QuickLogModal({
   const [protein, setProtein] = useState("38");
   const [fat, setFat] = useState("16");
   const [carbs, setCarbs] = useState("65");
+  const [mealEstBadge, setMealEstBadge] = useState<string>("");
+  const [isEstimatingMealText, setIsEstimatingMealText] = useState(false);
+
+  const handleMealDescChange = (val: string) => {
+    setMealDesc(val);
+    if (val.trim().length >= 2) {
+      const est = estimateNutritionFromMealText(val);
+      setCalories(String(est.calories));
+      setProtein(String(est.protein));
+      setFat(String(est.fat));
+      setCarbs(String(est.carbs));
+      if (est.source === "dictionary") {
+        setMealEstBadge(`自動予想: ${est.matchedItems.join(" + ")}`);
+      } else {
+        setMealEstBadge("メニュー名から概算カロリー・PFCを自動予想しました");
+      }
+    } else {
+      setMealEstBadge("");
+    }
+  };
+
+  const handleAiEstimateMealFromText = async () => {
+    if (!mealDesc.trim()) return;
+    setIsEstimatingMealText(true);
+    try {
+      const est = await estimateMealTextWithGemini({
+        mealText: mealDesc,
+        apiKey: settings.geminiApiKey,
+      });
+      setCalories(String(est.calories));
+      setProtein(String(est.protein));
+      setFat(String(est.fat));
+      setCarbs(String(est.carbs));
+      setMealEstBadge(
+        est.source === "gemini"
+          ? `✨ Gemini AI精密推定 (${est.matchedItems.join("・")})`
+          : `✨ スマート辞書推定 (${est.matchedItems.join("・")})`
+      );
+    } finally {
+      setIsEstimatingMealText(false);
+    }
+  };
 
   // Body Form State
   const [weightKg, setWeightKg] = useState("67.2");
@@ -824,15 +871,69 @@ export function QuickLogModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">メニュー内容</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-medium text-slate-300">
+                        メニュー内容（入力すると自動でカロリー＆PFCを予想します）
+                      </label>
+                      <button
+                        type="button"
+                        disabled={!mealDesc.trim() || isEstimatingMealText}
+                        onClick={handleAiEstimateMealFromText}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-[11px] font-bold text-emerald-300 disabled:opacity-40 transition"
+                      >
+                        {isEstimatingMealText ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3 h-3" />
+                        )}
+                        <span>AI精密予想</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
                       required
                       value={mealDesc}
-                      onChange={(e) => setMealDesc(e.target.value)}
-                      placeholder="例: 鶏むね肉のグリルサラダボウル・玄米"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
+                      onChange={(e) => handleMealDescChange(e.target.value)}
+                      placeholder="例: 納豆ご飯と焼き鮭と味噌汁 / カレーライスとサラダ"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:border-amber-400/70 focus:outline-none"
                     />
+                    {mealEstBadge && (
+                      <p className="mt-1.5 text-[11px] text-emerald-300 font-medium">
+                        💡 {mealEstBadge}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* よく食べるメニューのワンタップ入力チップ */}
+                  <div className="space-y-1.5">
+                    <span className="block text-[11px] text-slate-400">
+                      ワンタップでメニュー追加（組み合わせ自動計算）:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        "納豆ご飯",
+                        "鶏むね肉・サラダ",
+                        "焼き鮭・玄米・味噌汁",
+                        "ホエイプロテイン",
+                        "ゆで卵",
+                        "オートミール・ヨーグルト",
+                        "蕎麦",
+                        "カレーライス",
+                        "ラーメン・餃子",
+                      ].map((chip) => (
+                        <button
+                          key={chip}
+                          type="button"
+                          onClick={() => {
+                            const next = mealDesc ? `${mealDesc}・${chip}` : chip;
+                            handleMealDescChange(next);
+                          }}
+                          className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800/90 hover:bg-slate-700 text-amber-200 border border-slate-700 transition"
+                        >
+                          + {chip}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-4 gap-2.5">
@@ -842,34 +943,37 @@ export function QuickLogModal({
                         type="number"
                         value={calories}
                         onChange={(e) => setCalories(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] text-emerald-400 mb-1">Protein (g)</label>
                       <input
                         type="number"
+                        step="0.1"
                         value={protein}
                         onChange={(e) => setProtein(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-emerald-300 font-bold"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] text-amber-400 mb-1">Fat (g)</label>
                       <input
                         type="number"
+                        step="0.1"
                         value={fat}
                         onChange={(e) => setFat(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
                     <div>
                       <label className="block text-[11px] text-sky-400 mb-1">Carbs (g)</label>
                       <input
                         type="number"
+                        step="0.1"
                         value={carbs}
                         onChange={(e) => setCarbs(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-sky-300 font-bold"
                       />
                     </div>
                   </div>

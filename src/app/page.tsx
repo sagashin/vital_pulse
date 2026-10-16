@@ -47,6 +47,7 @@ import { CorrelationAnalyzer } from "@/components/CorrelationAnalyzer";
 import { DataManagementModal } from "@/components/DataManagementModal";
 import { ActivityHeatmapAndReport } from "@/components/ActivityHeatmapAndReport";
 import { GoalsAndAiSettingsModal } from "@/components/GoalsAndAiSettingsModal";
+import { BioAgeAndMetabolicCard } from "@/components/BioAgeAndMetabolicCard";
 
 function getTodayDateString(): string {
   const d = new Date();
@@ -921,6 +922,27 @@ export default function HealthDashboardPage() {
             </div>
           </motion.div>
         </div>
+
+        {/* Row 2.5: Vital Bio-Age (健康年齢) & BMR vs Intake Calorie Comparison */}
+        <BioAgeAndMetabolicCard
+          settings={settings}
+          currentWeightKg={
+            todayBody?.weightKg ??
+            bodyMetrics[bodyMetrics.length - 1]?.weightKg ??
+            settings.targetWeightKg
+          }
+          currentBodyFatPct={
+            todayBody?.bodyFatPercentage ??
+            bodyMetrics[bodyMetrics.length - 1]?.bodyFatPercentage ??
+            settings.targetBodyFatPct
+          }
+          intakeCalories={nutritionSummary.totalCal}
+          workoutCalories={todayWorkouts.reduce((s, w) => s + w.caloriesBurned, 0)}
+          steps={todayActivity?.steps ?? 8000}
+          sleepHours={todaySleep?.durationHours ?? 7.5}
+          readinessScore={readinessScore}
+          onOpenProfileSettings={() => setGoalsModalOpen(true)}
+        />
 
         {/* Row 3: 28-Day Calendar Heatmap & Weekly Executive Digest */}
         <ActivityHeatmapAndReport
