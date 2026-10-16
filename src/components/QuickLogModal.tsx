@@ -19,7 +19,6 @@ import {
   Calendar,
 } from "lucide-react";
 import { db, calculateReadinessScore, type MealType } from "@/lib/db/schema";
-import { parseNaturalHealthInput, type ParsedVoiceCommand } from "@/lib/voice-parser";
 import {
   parseNaturalHealthInput,
   estimateNutritionFromMealText,
@@ -923,9 +922,6 @@ export function QuickLogModal({
                       type="text"
                       required
                       value={mealDesc}
-                      onChange={(e) => setMealDesc(e.target.value)}
-                      placeholder="例: 鶏むね肉のグリルサラダボウル・玄米"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
                       onChange={(e) => handleMealDescChange(e.target.value)}
                       placeholder="例: 納豆ご飯と焼き鮭と味噌汁 / カレーライスとサラダ"
                       className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:border-amber-400/70 focus:outline-none"
@@ -976,7 +972,6 @@ export function QuickLogModal({
                         type="number"
                         value={calories}
                         onChange={(e) => setCalories(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
@@ -987,7 +982,6 @@ export function QuickLogModal({
                         step="0.1"
                         value={protein}
                         onChange={(e) => setProtein(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-emerald-300 font-bold"
                       />
                     </div>
@@ -998,7 +992,6 @@ export function QuickLogModal({
                         step="0.1"
                         value={fat}
                         onChange={(e) => setFat(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
@@ -1009,7 +1002,6 @@ export function QuickLogModal({
                         step="0.1"
                         value={carbs}
                         onChange={(e) => setCarbs(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-sky-300 font-bold"
                       />
                     </div>
