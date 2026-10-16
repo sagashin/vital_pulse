@@ -19,6 +19,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { db, calculateReadinessScore, type MealType } from "@/lib/db/schema";
+import { parseNaturalHealthInput, type ParsedVoiceCommand } from "@/lib/voice-parser";
 import {
   parseNaturalHealthInput,
   estimateNutritionFromMealText,
@@ -144,6 +145,34 @@ export function QuickLogModal({
   const [wakeTime, setWakeTime] = useState("06:45");
   const [sleepHours, setSleepHours] = useState("7.5");
   const [sleepQuality, setSleepQuality] = useState<1 | 2 | 3 | 4 | 5>(4);
+
+  const computeSleepDuration = (bed: string, wake: string): string => {
+    const [bH, bM] = bed.split(":").map(Number);
+    const [wH, wM] = wake.split(":").map(Number);
+    if (isNaN(bH) || isNaN(bM) || isNaN(wH) || isNaN(wM)) return sleepHours;
+
+    const bedMinutes = bH * 60 + bM;
+    const wakeMinutes = wH * 60 + wM;
+    // 日付をまたぐ場合（例: 23:15 -> 06:45）も正しく計算
+    let diffMinutes = wakeMinutes - bedMinutes;
+    if (diffMinutes <= 0) {
+      diffMinutes += 24 * 60;
+    }
+    const hours = Number((diffMinutes / 60).toFixed(1));
+    return String(hours);
+  };
+
+  const handleBedTimeChange = (newBed: string) => {
+    setBedTime(newBed);
+    const calc = computeSleepDuration(newBed, wakeTime);
+    setSleepHours(calc);
+  };
+
+  const handleWakeTimeChange = (newWake: string) => {
+    setWakeTime(newWake);
+    const calc = computeSleepDuration(bedTime, newWake);
+    setSleepHours(calc);
+  };
 
   const handleSmartTextChange = (val: string) => {
     setSmartText(val);
@@ -871,6 +900,7 @@ export function QuickLogModal({
                   </div>
 
                   <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">メニュー内容</label>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-medium text-slate-300">
                         メニュー内容（入力すると自動でカロリー＆PFCを予想します）
@@ -893,6 +923,9 @@ export function QuickLogModal({
                       type="text"
                       required
                       value={mealDesc}
+                      onChange={(e) => setMealDesc(e.target.value)}
+                      placeholder="例: 鶏むね肉のグリルサラダボウル・玄米"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
                       onChange={(e) => handleMealDescChange(e.target.value)}
                       placeholder="例: 納豆ご飯と焼き鮭と味噌汁 / カレーライスとサラダ"
                       className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:border-amber-400/70 focus:outline-none"
@@ -943,6 +976,7 @@ export function QuickLogModal({
                         type="number"
                         value={calories}
                         onChange={(e) => setCalories(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
@@ -953,6 +987,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={protein}
                         onChange={(e) => setProtein(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-emerald-300 font-bold"
                       />
                     </div>
@@ -963,6 +998,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={fat}
                         onChange={(e) => setFat(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
                       />
                     </div>
@@ -973,6 +1009,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={carbs}
                         onChange={(e) => setCarbs(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
                         className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-sky-300 font-bold"
                       />
                     </div>
@@ -1105,33 +1142,42 @@ export function QuickLogModal({
                 <form onSubmit={handleSaveSleep} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">就寝時刻</label>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        就寝時刻（変更で自動計算）
+                      </label>
                       <input
                         type="time"
                         value={bedTime}
-                        onChange={(e) => setBedTime(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
+                        onChange={(e) => handleBedTimeChange(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">起床時刻</label>
+                      <label className="block text-xs text-slate-400 mb-1">
+                        起床時刻（変更で自動計算）
+                      </label>
                       <input
                         type="time"
                         value={wakeTime}
-                        onChange={(e) => setWakeTime(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
+                        onChange={(e) => handleWakeTimeChange(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">睡眠時間 (h)</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">睡眠時間 (h)</label>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 font-semibold">
+                          自動算出（微調整も可）
+                        </span>
+                      </div>
                       <input
                         type="number"
                         step="0.1"
                         value={sleepHours}
                         onChange={(e) => setSleepHours(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-indigo-300 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-indigo-500/40 px-3.5 py-2.5 text-sm text-indigo-300 font-extrabold"
                       />
                     </div>
                     <div>
