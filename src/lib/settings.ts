@@ -21,7 +21,7 @@ export const DEFAULT_USER_SETTINGS: UserGoalsAndSettings = {
   targetSteps: 10000,
   targetSleepHours: 7.5,
   geminiApiKey: "",
-  geminiModel: "gemini-2.5-flash",
+  geminiModel: "auto",
 };
 
 const STORAGE_KEY = "vital_pulse_user_settings_v1";
@@ -32,6 +32,13 @@ export function loadUserSettings(): UserGoalsAndSettings {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_USER_SETTINGS;
     const parsed = JSON.parse(raw);
+    // 旧デフォルト(gemini-2.5-flash / gemini-1.5-flash)が保存されていた場合は最新自動選択(auto)へマイグレーション
+    if (
+      parsed.geminiModel === "gemini-2.5-flash" ||
+      parsed.geminiModel === "gemini-1.5-flash"
+    ) {
+      parsed.geminiModel = "auto";
+    }
     return {
       ...DEFAULT_USER_SETTINGS,
       ...parsed,

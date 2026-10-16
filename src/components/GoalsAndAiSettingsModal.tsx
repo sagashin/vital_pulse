@@ -270,9 +270,11 @@ export function GoalsAndAiSettingsModal({
                       }
                       className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white"
                     >
+                      <option value="auto">自動選択 (推奨・最新Flash)</option>
+                      <option value="gemini-3.8-flash">gemini-3.8-flash</option>
+                      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                      <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
                       <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                      <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-                      <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                     </select>
                   </div>
                 </div>

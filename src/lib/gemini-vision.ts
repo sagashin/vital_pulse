@@ -55,8 +55,67 @@ export async function fileToCompressedDataUrl(
 }
 
 /**
+ * APIキーで利用可能なモデル一覧をGoogle APIから動的に取得し、最適なマルチモーダルFlashモデルを返す
+ */
+async function discoverAvailableGeminiModels(apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(
+        apiKey
+      )}`
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data?.models)) return [];
+
+    const generateModels: string[] = data.models
+      .filter(
+        (m: {
+          name?: string;
+          supportedGenerationMethods?: string[];
+        }) =>
+          typeof m.name === "string" &&
+          Array.isArray(m.supportedGenerationMethods) &&
+          m.supportedGenerationMethods.includes("generateContent") &&
+          !m.name.includes("tts") &&
+          !m.name.includes("embedding") &&
+          !m.name.includes("imagen") &&
+          !m.name.includes("aqa")
+      )
+      .map((m: { name: string }) => m.name.replace(/^models\//, ""));
+
+    // 優先度順にソート（3.8-flash -> 3.7-flash -> 3.6-flash -> 3.5-flash -> 3-flash -> 2.5-flash -> 2.0-flash）
+    const priorityOrder = [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+    ];
+
+    generateModels.sort((a, b) => {
+      const idxA = priorityOrder.findIndex((p) => a.startsWith(p));
+      const idxB = priorityOrder.findIndex((p) => b.startsWith(p));
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      if (a.includes("flash") && !b.includes("flash")) return -1;
+      if (!a.includes("flash") && b.includes("flash")) return 1;
+      return 0;
+    });
+
+    return generateModels;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Gemini Multimodal APIを使って料理画像（＋補足テキスト）からカロリー・PFCを構造化JSONで推定する
- * API呼び出しの成功/失敗を明示し、失敗時にも理由を表示
  */
 export async function analyzeFoodPhotoWithGemini(params: {
   base64Data: string;
@@ -72,23 +131,35 @@ export async function analyzeFoodPhotoWithGemini(params: {
     fileName = "",
     userHint = "",
     apiKey = "",
-    model = "gemini-2.5-flash",
+    model = "auto",
   } = params;
 
   const trimmedKey = apiKey.trim();
-  let apiErrorMessage = "";
+  const errors: string[] = [];
 
   if (trimmedKey && base64Data) {
-    // 試行するモデル候補（設定値 -> gemini-2.5-flash -> gemini-1.5-flash）
+    // 1. まずそのAPIキーで許可されている最新モデル一覧を自動検出
+    const discovered = await discoverAvailableGeminiModels(trimmedKey);
+
+    const staticFallbacks = [
+      "gemini-3.8-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3-flash-preview",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+    ];
+
+    const preferredFirst =
+      model && model !== "auto" ? [model.trim()] : [];
+
     const candidateModels = Array.from(
-      new Set([model.trim() || "gemini-2.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"])
+      new Set([...preferredFirst, ...discovered.slice(0, 4), ...staticFallbacks])
     );
 
-    for (const targetModel of candidateModels) {
-      try {
-        const prompt = `あなたはプロの管理栄養士AIです。添付された料理・食事の写真${
-          userHint ? `（ユーザー補足メモ: ${userHint}）` : ""
-        }を正確に観察して解析し、必ず以下のJSONスキーマ形式のみで回答してください。マークダウンの\`\`\`jsonブロックなどは一切含めず、純粋なJSON文字列のみを出力してください。
+    const prompt = `あなたはプロの管理栄養士AIです。添付された料理・食事の写真${
+      userHint ? `（ユーザー補足メモ: ${userHint}）` : ""
+    }を正確に観察して解析し、必ず以下のJSONスキーマ形式のみで回答してください。マークダウンの\`\`\`jsonブロックなどは一切含めず、純粋なJSON文字列のみを出力してください。
 {
   "description": "写真に写っている料理全体の具体的な日本語タイトル（例: 醤油ラーメン・半チャーハンセット、鶏むね肉の照り焼きと白米 など）",
   "mealType": "breakfast" | "lunch" | "dinner" | "snack",
@@ -102,6 +173,8 @@ export async function analyzeFoodPhotoWithGemini(params: {
   ]
 }`;
 
+    for (const targetModel of candidateModels) {
+      try {
         const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${encodeURIComponent(
           trimmedKey
         )}`;
@@ -131,8 +204,10 @@ export async function analyzeFoodPhotoWithGemini(params: {
         });
 
         if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`HTTP ${res.status} (${targetModel}): ${errText}`);
+          const errJson = await res.json().catch(() => null);
+          const shortErr =
+            errJson?.error?.message || `HTTP ${res.status}`;
+          throw new Error(`${targetModel}: ${shortErr}`);
         }
 
         const json = await res.json();
@@ -159,18 +234,17 @@ export async function analyzeFoodPhotoWithGemini(params: {
         };
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`Gemini API attempt with ${targetModel} failed:`, msg);
-        apiErrorMessage = msg;
+        console.warn(`Gemini API attempt failed:`, msg);
+        errors.push(msg);
       }
     }
   }
 
-  // APIキー未入力、または通信エラー時のフォールバック処理
+  // APIキー未入力、または全モデル失敗時のフォールバック処理
   const hour = new Date().getHours();
   const defaultMealType: MealType =
     hour < 10 ? "breakfast" : hour < 15 ? "lunch" : hour < 21 ? "dinner" : "snack";
 
-  // ユーザーの補足メモがある場合は、メモのキーワードから計算
   const hintText = (userHint || fileName).trim();
   const cleanDesc = hintText ? hintText : "スマート推定プレート";
 
@@ -197,9 +271,10 @@ export async function analyzeFoodPhotoWithGemini(params: {
     estC = 38;
   }
 
+  const firstError = errors[0] || "接続エラー";
   const reason = !trimmedKey
     ? "Gemini APIキーが設定されていないため、写真解析が行えませんでした。「目標・AI設定」からAPIキーを入力してください。"
-    : `Gemini API通信エラー (${apiErrorMessage || "モデル接続失敗"}) が発生したため、写真の解析に失敗しました。キーの権限またはモデル設定をご確認ください。`;
+    : `Gemini API通信エラー (${firstError})。APIキーが有効かご確認ください。`;
 
   return {
     description: cleanDesc,
@@ -211,6 +286,6 @@ export async function analyzeFoodPhotoWithGemini(params: {
     confidenceNote: reason,
     items: [{ name: cleanDesc, calories: estCal, protein: estP, fat: estF, carbs: estC }],
     source: "local-estimate",
-    errorMessage: !trimmedKey ? undefined : apiErrorMessage,
+    errorMessage: !trimmedKey ? undefined : firstError,
   };
 }
