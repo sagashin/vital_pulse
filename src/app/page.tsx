@@ -48,6 +48,7 @@ import { DataManagementModal } from "@/components/DataManagementModal";
 import { ActivityHeatmapAndReport } from "@/components/ActivityHeatmapAndReport";
 import { GoalsAndAiSettingsModal } from "@/components/GoalsAndAiSettingsModal";
 import { BioAgeAndMetabolicCard } from "@/components/BioAgeAndMetabolicCard";
+import { SleepTrendChartCard } from "@/components/SleepTrendChartCard";
 
 function getTodayDateString(): string {
   const d = new Date();
@@ -942,6 +943,18 @@ export default function HealthDashboardPage() {
           sleepHours={todaySleep?.durationHours ?? 7.5}
           readinessScore={readinessScore}
           onOpenProfileSettings={() => setGoalsModalOpen(true)}
+        />
+
+        {/* Row 2.6: Sleep Duration & 7-Day Moving Average Trend Chart */}
+        <SleepTrendChartCard
+          sleepLogs={sleepLogs}
+          targetSleepHours={settings.targetSleepHours}
+          selectedDate={selectedDate}
+          onSelectDate={(dateStr) => {
+            setSelectedDate(dateStr);
+            showToast(`${dateStr} の睡眠・ライフログに切り替えました`);
+          }}
+          onOpenSleepModal={() => openQuickModal("sleep")}
         />
 
         {/* Row 3: 28-Day Calendar Heatmap & Weekly Executive Digest */}
