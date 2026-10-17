@@ -15,7 +15,7 @@ import {
   Cell,
 } from "recharts";
 import { Moon, Sparkles, Clock, BatteryCharging, Plus } from "lucide-react";
-import type { SleepLog } from "@/lib/db/schema";
+import { type SleepLog, addDaysToDateStr } from "@/lib/db/schema";
 
 interface SleepTrendChartCardProps {
   sleepLogs: SleepLog[];
@@ -33,9 +33,19 @@ export function SleepTrendChartCard({
   onOpenSleepModal,
 }: SleepTrendChartCardProps) {
   const chartData = useMemo(() => {
-    const sorted = [...sleepLogs].sort((a, b) => a.date.localeCompare(b.date));
-    return sorted.map((item, idx) => {
-      const windowSlice = sorted.slice(Math.max(0, idx - 6), idx + 1);
+    const deduplicatedMap = new Map<string, SleepLog>();
+    for (const log of sleepLogs) {
+      deduplicatedMap.set(log.date, log);
+    }
+    const sorted = Array.from(deduplicatedMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+
+    return sorted.map((item) => {
+      const minDate = addDaysToDateStr(item.date, -6);
+      const windowSlice = sorted.filter(
+        (record) => record.date >= minDate && record.date <= item.date
+      );
       const avg7d =
         windowSlice.reduce((sum, cur) => sum + cur.durationHours, 0) /
         windowSlice.length;
@@ -300,3 +310,4 @@ export function SleepTrendChartCard({
     </motion.div>
   );
 }
+

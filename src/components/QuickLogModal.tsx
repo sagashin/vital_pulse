@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -17,8 +17,17 @@ import {
   Loader2,
   ImagePlus,
   Calendar,
+  Flame,
 } from "lucide-react";
-import { db, calculateReadinessScore, type MealType } from "@/lib/db/schema";
+import {
+  db,
+  type MealType,
+  upsertBodyMetric,
+  upsertSleepLog,
+  upsertActivityLog,
+  recalculateAndSaveReadiness,
+  addDaysToDateStr,
+} from "@/lib/db/schema";
 import {
   parseNaturalHealthInput,
   estimateNutritionFromMealText,
@@ -32,16 +41,23 @@ import {
 } from "@/lib/gemini-vision";
 import type { UserGoalsAndSettings } from "@/lib/settings";
 
-export type QuickLogTab = "ai" | "photo" | "meal" | "body" | "workout" | "sleep";
+export type QuickLogTab =
+  | "ai"
+  | "photo"
+  | "meal"
+  | "body"
+  | "workout"
+  | "sleep"
+  | "activity";
 
 interface QuickLogModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialTab?: QuickLogTab;
+  initialTab: QuickLogTab;
   selectedDate: string;
   settings: UserGoalsAndSettings;
-  onSuccess: (message: string) => void;
-  onOpenAiSettings?: () => void;
+  onSuccess: (msg: string) => void;
+  onOpenAiSettings: () => void;
 }
 
 export function QuickLogModal({
@@ -57,7 +73,7 @@ export function QuickLogModal({
   const [recordDate, setRecordDate] = useState<string>(selectedDate);
 
   // Sync initialTab and recordDate when opened
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
       if (initialTab) setActiveTab(initialTab);
       setRecordDate(selectedDate);
@@ -86,6 +102,88 @@ export function QuickLogModal({
   const [carbs, setCarbs] = useState("65");
   const [mealEstBadge, setMealEstBadge] = useState<string>("");
   const [isEstimatingMealText, setIsEstimatingMealText] = useState(false);
+
+  // Body Form State
+  const [weightKg, setWeightKg] = useState("67.2");
+  const [bodyFat, setBodyFat] = useState("17.2");
+
+  // Load existing body metrics for recordDate
+  useEffect(() => {
+    let active = true;
+    async function loadBody() {
+      const existing = await db.bodyMetrics.where("date").equals(recordDate).first();
+      if (active && existing) {
+        setWeightKg(String(existing.weightKg));
+        setBodyFat(String(existing.bodyFatPercentage));
+      }
+    }
+    if (isOpen && activeTab === "body") {
+      loadBody();
+    }
+    return () => {
+      active = false;
+    };
+  }, [isOpen, activeTab, recordDate]);
+
+  // Workout Form State
+  const [workoutType, setWorkoutType] = useState("上半身ストレングス＆コア");
+  const [durationMin, setDurationMin] = useState("45");
+  const [intensity, setIntensity] = useState<1 | 2 | 3 | 4 | 5>(4);
+  const [caloriesBurned, setCaloriesBurned] = useState("320");
+  const [workoutMemo, setWorkoutMemo] = useState("フォーム重視で高密度トレーニング");
+
+  // Sleep Form State
+  const [bedTime, setBedTime] = useState("23:15");
+  const [wakeTime, setWakeTime] = useState("06:45");
+  const [sleepHours, setSleepHours] = useState("7.5");
+  const [sleepQuality, setSleepQuality] = useState<1 | 2 | 3 | 4 | 5>(4);
+
+  // Activity Form State
+  const [stepsInput, setStepsInput] = useState("8500");
+  const [activeMinutesInput, setActiveMinutesInput] = useState("45");
+
+  // Load existing activity for recordDate
+  useEffect(() => {
+    let active = true;
+    async function loadAct() {
+      const existing = await db.activities.where("date").equals(recordDate).first();
+      if (active && existing) {
+        setStepsInput(String(existing.steps));
+        setActiveMinutesInput(String(existing.activeMinutes));
+      }
+    }
+    if (isOpen && activeTab === "activity") {
+      loadAct();
+    }
+    return () => {
+      active = false;
+    };
+  }, [isOpen, activeTab, recordDate]);
+
+  const computeSleepDuration = (bed: string, wake: string): string => {
+    const [bH, bM] = bed.split(":").map(Number);
+    const [wH, wM] = wake.split(":").map(Number);
+    if (isNaN(bH) || isNaN(bM) || isNaN(wH) || isNaN(wM)) return sleepHours;
+
+    const bedMinutes = bH * 60 + bM;
+    const wakeMinutes = wH * 60 + wM;
+    let diffMinutes = wakeMinutes - bedMinutes;
+    if (diffMinutes <= 0) {
+      diffMinutes += 24 * 60;
+    }
+    const hours = Number((diffMinutes / 60).toFixed(1));
+    return String(hours);
+  };
+
+  const handleBedTimeChange = (newBed: string) => {
+    setBedTime(newBed);
+    setSleepHours(computeSleepDuration(newBed, wakeTime));
+  };
+
+  const handleWakeTimeChange = (newWake: string) => {
+    setWakeTime(newWake);
+    setSleepHours(computeSleepDuration(bedTime, newWake));
+  };
 
   const handleMealDescChange = (val: string) => {
     setMealDesc(val);
@@ -125,52 +223,6 @@ export function QuickLogModal({
     } finally {
       setIsEstimatingMealText(false);
     }
-  };
-
-  // Body Form State
-  const [weightKg, setWeightKg] = useState("67.2");
-  const [bodyFat, setBodyFat] = useState("17.2");
-
-  // Workout Form State
-  const [workoutType, setWorkoutType] = useState("上半身ストレングス＆コア");
-  const [durationMin, setDurationMin] = useState("45");
-  const [intensity, setIntensity] = useState<1 | 2 | 3 | 4 | 5>(4);
-  const [caloriesBurned, setCaloriesBurned] = useState("320");
-  const [workoutMemo, setWorkoutMemo] = useState("フォーム重視で高密度トレーニング");
-  const [stepsInput, setStepsInput] = useState("9200");
-
-  // Sleep Form State
-  const [bedTime, setBedTime] = useState("23:15");
-  const [wakeTime, setWakeTime] = useState("06:45");
-  const [sleepHours, setSleepHours] = useState("7.5");
-  const [sleepQuality, setSleepQuality] = useState<1 | 2 | 3 | 4 | 5>(4);
-
-  const computeSleepDuration = (bed: string, wake: string): string => {
-    const [bH, bM] = bed.split(":").map(Number);
-    const [wH, wM] = wake.split(":").map(Number);
-    if (isNaN(bH) || isNaN(bM) || isNaN(wH) || isNaN(wM)) return sleepHours;
-
-    const bedMinutes = bH * 60 + bM;
-    const wakeMinutes = wH * 60 + wM;
-    // 日付をまたぐ場合（例: 23:15 -> 06:45）も正しく計算
-    let diffMinutes = wakeMinutes - bedMinutes;
-    if (diffMinutes <= 0) {
-      diffMinutes += 24 * 60;
-    }
-    const hours = Number((diffMinutes / 60).toFixed(1));
-    return String(hours);
-  };
-
-  const handleBedTimeChange = (newBed: string) => {
-    setBedTime(newBed);
-    const calc = computeSleepDuration(newBed, wakeTime);
-    setSleepHours(calc);
-  };
-
-  const handleWakeTimeChange = (newWake: string) => {
-    setWakeTime(newWake);
-    const calc = computeSleepDuration(bedTime, newWake);
-    setSleepHours(calc);
   };
 
   const handleSmartTextChange = (val: string) => {
@@ -242,41 +294,6 @@ export function QuickLogModal({
     }
   };
 
-  const handleSimulateSamplePhoto = async (presetName: string) => {
-    setIsAnalyzingPhoto(true);
-    setPhotoHint(presetName);
-    try {
-      // SVG食事プレートプレビューを動的生成
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="280" viewBox="0 0 480 280">
-        <defs>
-          <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#0f172a"/>
-            <stop offset="100%" stop-color="#1e293b"/>
-          </linearGradient>
-        </defs>
-        <rect width="480" height="280" rx="24" fill="url(#bg)"/>
-        <circle cx="240" cy="140" r="95" fill="#020617" stroke="#334155" stroke-width="4"/>
-        <circle cx="205" cy="120" r="36" fill="#10b981" fill-opacity="0.35"/>
-        <circle cx="275" cy="125" r="32" fill="#f59e0b" fill-opacity="0.35"/>
-        <circle cx="240" cy="175" r="30" fill="#38bdf8" fill-opacity="0.35"/>
-        <text x="240" y="145" text-anchor="middle" fill="#f8fafc" font-family="sans-serif" font-size="15" font-weight="bold">${presetName}</text>
-      </svg>`;
-      const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-      setPhotoPreviewUrl(dataUrl);
-
-      const result = await analyzeFoodPhotoWithGemini({
-        base64Data: "",
-        mimeType: "image/jpeg",
-        fileName: presetName,
-        userHint: presetName,
-        apiKey: "",
-      });
-      setPhotoAnalysis(result);
-    } finally {
-      setIsAnalyzingPhoto(false);
-    }
-  };
-
   const handleSaveAnalyzedPhotoMeal = async () => {
     if (!photoAnalysis) return;
     await db.meals.add({
@@ -298,25 +315,14 @@ export function QuickLogModal({
   };
 
   const saveSmartParsedCommands = async () => {
-    const commands = parsedPreview.length > 0 ? parsedPreview : parseNaturalHealthInput(smartText);
+    const commands =
+      parsedPreview.length > 0 ? parsedPreview : parseNaturalHealthInput(smartText);
     if (commands.length === 0) return;
 
     const nowIso = new Date().toISOString();
     for (const cmd of commands) {
       if (cmd.category === "body" && cmd.weightKg) {
-        const existing = await db.bodyMetrics.where("date").equals(recordDate).first();
-        if (existing?.id) {
-          await db.bodyMetrics.update(existing.id, {
-            weightKg: cmd.weightKg,
-            bodyFatPercentage: cmd.bodyFatPercentage ?? 17.5,
-          });
-        } else {
-          await db.bodyMetrics.add({
-            date: recordDate,
-            weightKg: cmd.weightKg,
-            bodyFatPercentage: cmd.bodyFatPercentage ?? 17.5,
-          });
-        }
+        await upsertBodyMetric(recordDate, cmd.weightKg, cmd.bodyFatPercentage ?? 17.5);
       } else if (cmd.category === "meal") {
         await db.meals.add({
           date: recordDate,
@@ -338,23 +344,15 @@ export function QuickLogModal({
           caloriesBurned: cmd.caloriesBurned ?? 240,
           memo: "AI・音声スマート入力から記録",
         });
+        await recalculateAndSaveReadiness(addDaysToDateStr(recordDate, 1));
       } else if (cmd.category === "sleep" && cmd.sleepHours) {
-        const existingSleep = await db.sleepLogs.where("date").equals(recordDate).first();
-        const quality = cmd.sleepQuality ?? 4;
-        if (existingSleep?.id) {
-          await db.sleepLogs.update(existingSleep.id, {
-            durationHours: cmd.sleepHours,
-            qualityScore: quality,
-          });
-        } else {
-          await db.sleepLogs.add({
-            date: recordDate,
-            bedTime: "23:30",
-            wakeTime: "07:00",
-            durationHours: cmd.sleepHours,
-            qualityScore: quality,
-          });
-        }
+        await upsertSleepLog({
+          date: recordDate,
+          bedTime: "23:30",
+          wakeTime: "07:00",
+          durationHours: cmd.sleepHours,
+          qualityScore: cmd.sleepQuality ?? 4,
+        });
       }
     }
 
@@ -383,19 +381,7 @@ export function QuickLogModal({
 
   const handleSaveBody = async (e: React.FormEvent) => {
     e.preventDefault();
-    const existing = await db.bodyMetrics.where("date").equals(recordDate).first();
-    if (existing?.id) {
-      await db.bodyMetrics.update(existing.id, {
-        weightKg: Number(weightKg),
-        bodyFatPercentage: Number(bodyFat),
-      });
-    } else {
-      await db.bodyMetrics.add({
-        date: recordDate,
-        weightKg: Number(weightKg),
-        bodyFatPercentage: Number(bodyFat),
-      });
-    }
+    await upsertBodyMetric(recordDate, Number(weightKg), Number(bodyFat));
     onSuccess(`体重 ${weightKg}kg・体脂肪率 ${bodyFat}% (${recordDate})を記録しました`);
     onClose();
   };
@@ -411,63 +397,32 @@ export function QuickLogModal({
       caloriesBurned: Number(caloriesBurned) || 200,
       memo: workoutMemo,
     });
-
-    const existingAct = await db.activities.where("date").equals(recordDate).first();
-    if (existingAct?.id) {
-      await db.activities.update(existingAct.id, {
-        steps: Number(stepsInput) || existingAct.steps,
-        activeMinutes: existingAct.activeMinutes + (Number(durationMin) || 30),
-      });
-    } else {
-      await db.activities.add({
-        date: recordDate,
-        steps: Number(stepsInput) || 8500,
-        activeMinutes: Number(durationMin) || 45,
-        readinessScore: 84,
-      });
-    }
-
-    onSuccess(`ワークアウトと活動ログ(${recordDate})を記録しました`);
+    // 翌日のReadinessを再計算
+    await recalculateAndSaveReadiness(addDaysToDateStr(recordDate, 1));
+    onSuccess(`ワークアウト(${recordDate})を記録しました`);
     onClose();
   };
 
   const handleSaveSleep = async (e: React.FormEvent) => {
     e.preventDefault();
     const hours = Number(sleepHours) || 7.5;
-    const existingSleep = await db.sleepLogs.where("date").equals(recordDate).first();
-    if (existingSleep?.id) {
-      await db.sleepLogs.update(existingSleep.id, {
-        bedTime,
-        wakeTime,
-        durationHours: hours,
-        qualityScore: sleepQuality,
-      });
-    } else {
-      await db.sleepLogs.add({
-        date: recordDate,
-        bedTime,
-        wakeTime,
-        durationHours: hours,
-        qualityScore: sleepQuality,
-      });
-    }
+    await upsertSleepLog({
+      date: recordDate,
+      bedTime,
+      wakeTime,
+      durationHours: hours,
+      qualityScore: sleepQuality,
+    });
+    onSuccess(`睡眠ログ(${recordDate})を記録し、Readinessスコアを更新しました`);
+    onClose();
+  };
 
-    const newReadiness = calculateReadinessScore(hours, sleepQuality, 300, 50);
-    const existingAct = await db.activities.where("date").equals(recordDate).first();
-    if (existingAct?.id) {
-      await db.activities.update(existingAct.id, {
-        readinessScore: newReadiness,
-      });
-    } else {
-      await db.activities.add({
-        date: recordDate,
-        steps: 8000,
-        activeMinutes: 45,
-        readinessScore: newReadiness,
-      });
-    }
-
-    onSuccess(`睡眠ログ(${recordDate})を記録し、Readinessスコア(${newReadiness})を更新しました`);
+  const handleSaveActivity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const steps = Number(stepsInput) || 0;
+    const activeMin = Number(activeMinutesInput) || 0;
+    await upsertActivityLog(recordDate, steps, activeMin);
+    onSuccess(`歩数 ${steps.toLocaleString()}歩・活動時間 ${activeMin}分 (${recordDate})を記録しました`);
     onClose();
   };
 
@@ -517,8 +472,8 @@ export function QuickLogModal({
               </button>
             </div>
 
-            {/* Category Tabs (6 tabs including Photo AI) */}
-            <div className="grid grid-cols-6 gap-1.5 px-6 pt-4">
+            {/* Category Tabs (7 tabs) */}
+            <div className="grid grid-cols-7 gap-1 px-4 sm:px-6 pt-4">
               {[
                 { id: "ai", label: "AI音声", icon: Sparkles, accent: "text-emerald-400" },
                 { id: "photo", label: "写真AI", icon: Camera, accent: "text-teal-400" },
@@ -526,6 +481,7 @@ export function QuickLogModal({
                 { id: "body", label: "体重", icon: Scale, accent: "text-sky-400" },
                 { id: "workout", label: "運動", icon: Dumbbell, accent: "text-rose-400" },
                 { id: "sleep", label: "睡眠", icon: Moon, accent: "text-indigo-400" },
+                { id: "activity", label: "歩数", icon: Footprints, accent: "text-emerald-300" },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;
@@ -534,13 +490,13 @@ export function QuickLogModal({
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id as QuickLogTab)}
-                    className={`flex flex-col items-center justify-center py-2.5 px-1.5 rounded-xl border text-[11px] font-medium transition ${
+                    className={`flex flex-col items-center justify-center py-2 px-1 rounded-xl border text-[11px] font-medium transition ${
                       active
                         ? "bg-slate-800 border-slate-600 text-white shadow-sm"
                         : "bg-slate-900/40 border-slate-800/60 text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
                     }`}
                   >
-                    <Icon className={`w-4 h-4 mb-1 ${active ? tab.accent : "text-slate-400"}`} />
+                    <Icon className={`w-3.5 h-3.5 mb-1 ${active ? tab.accent : "text-slate-400"}`} />
                     {tab.label}
                   </button>
                 );
@@ -560,7 +516,7 @@ export function QuickLogModal({
                       rows={3}
                       value={smartText}
                       onChange={(e) => handleSmartTextChange(e.target.value)}
-                      placeholder="例: 昼ごはんに鶏むねサラダとオートミール、体重67.1kg、体脂肪17.0%、ランニング30分"
+                      placeholder="例: 昼ごはんに鶏むねサラダと玄米、体重67.1kg、体脂肪17.0%、ランニング30分"
                       className="w-full rounded-2xl bg-slate-950/90 border border-slate-800 p-4 pr-14 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
                     />
                     <button
@@ -575,24 +531,6 @@ export function QuickLogModal({
                     >
                       {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                     </button>
-                  </div>
-
-                  {/* Quick Sample Pills */}
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      "朝ごはんに納豆ご飯とプロテイン飲んだ、体重67.0キロ",
-                      "昼にサーモンと玄米、筋トレ45分",
-                      "睡眠7.5時間、体重66.8kg、体脂肪16.9%",
-                    ].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => handleSmartTextChange(preset)}
-                        className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 transition"
-                      >
-                        + {preset}
-                      </button>
-                    ))}
                   </div>
 
                   {/* Real-time Structured Preview */}
@@ -634,26 +572,21 @@ export function QuickLogModal({
                       <strong>マルチモーダル料理写真AI解析:</strong>{" "}
                       {settings.geminiApiKey ? (
                         <span className="text-emerald-300 font-semibold">
-                          Gemini API ({settings.geminiModel}) 接続済み
+                          Gemini API 接続済み
                         </span>
                       ) : (
-                        <span>
-                          ローカルAI推定モード（実API連携は右の設定から）
-                        </span>
+                        <span>ローカルAI推定モード</span>
                       )}
                     </div>
-                    {onOpenAiSettings && (
-                      <button
-                        type="button"
-                        onClick={onOpenAiSettings}
-                        className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-teal-300 hover:text-white shrink-0 ml-2"
-                      >
-                        API設定
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={onOpenAiSettings}
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-teal-300 hover:text-white shrink-0 ml-2"
+                    >
+                      API設定
+                    </button>
                   </div>
 
-                  {/* Optional Hint Input */}
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       補足メモ（任意・写真と一緒にAIへ渡されます）
@@ -667,7 +600,6 @@ export function QuickLogModal({
                     />
                   </div>
 
-                  {/* Dropzone / Upload Trigger */}
                   <div
                     onClick={() => photoInputRef.current?.click()}
                     className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-700 hover:border-teal-400/70 bg-slate-950/70 p-5 text-center transition"
@@ -683,7 +615,7 @@ export function QuickLogModal({
                       <div className="py-6 flex flex-col items-center justify-center gap-2 text-teal-300">
                         <Loader2 className="w-7 h-7 animate-spin" />
                         <span className="text-xs font-semibold">
-                          料理写真からカロリー・PFC・品目をマルチモーダル解析中...
+                          料理写真からカロリー・PFCを解析中...
                         </span>
                       </div>
                     ) : photoPreviewUrl ? (
@@ -694,9 +626,7 @@ export function QuickLogModal({
                           alt="Meal preview"
                           className="mx-auto max-h-40 rounded-xl object-cover border border-slate-800"
                         />
-                        <p className="text-[11px] text-slate-400">
-                          クリックして別の写真を再選択
-                        </p>
+                        <p className="text-[11px] text-slate-400">クリックして別の写真を再選択</p>
                       </div>
                     ) : (
                       <div className="py-4 flex flex-col items-center justify-center gap-2">
@@ -707,56 +637,29 @@ export function QuickLogModal({
                           クリックして料理の写真を選択・撮影
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          JPEG / PNG / WebP 対応（自動で軽量リサイズ＆PFC解析）
+                          自動で軽量リサイズ＆PFC解析
                         </p>
                       </div>
                     )}
                   </div>
 
-                  {/* Quick Demo Photo Simulation Buttons */}
-                  <div className="space-y-1.5">
-                    <span className="block text-[11px] text-slate-400">
-                      手元に写真がない場合のワンクリックAI解析デモ:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        "グリルチキン＆アボカドサラダボウル",
-                        "焼き鮭と納豆・玄米の和食バランス膳",
-                        "高タンパク牛赤身ステーキ＆ブロッコリー",
-                      ].map((demoName) => (
-                        <button
-                          key={demoName}
-                          type="button"
-                          onClick={() => handleSimulateSamplePhoto(demoName)}
-                          className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 transition"
-                        >
-                          📸 {demoName}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Analyzed Result Card */}
                   {photoAnalysis && (
                     <div className="p-4 rounded-2xl bg-slate-950/90 border border-teal-500/40 space-y-3.5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
-                              photoAnalysis.source === "gemini"
-                                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                            }`}
-                          >
-                            {photoAnalysis.source === "gemini" ? "✨ Gemini Vision 解析" : "⚠️ 推定モード"}
-                          </span>
-                        </div>
-                        <span className="text-xs text-slate-400">タップして直接編集可能</span>
+                        <span
+                          className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
+                            photoAnalysis.source === "gemini"
+                              ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                              : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                          }`}
+                        >
+                          {photoAnalysis.source === "gemini" ? "✨ Gemini Vision 解析" : "⚠️ 推定モード"}
+                        </span>
+                        <span className="text-xs text-slate-400">直接編集可能</span>
                       </div>
 
-                      {/* Editable Meal Title */}
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">料理名・タイトル</label>
+                        <label className="block text-[11px] text-slate-400 mb-1">料理名</label>
                         <input
                           type="text"
                           value={photoAnalysis.description}
@@ -767,7 +670,6 @@ export function QuickLogModal({
                         />
                       </div>
 
-                      {/* Editable Calories and Macros */}
                       <div className="grid grid-cols-4 gap-2 text-xs">
                         <div>
                           <label className="block text-[10px] text-amber-300 mb-1 font-semibold">kcal</label>
@@ -830,36 +732,10 @@ export function QuickLogModal({
                         </div>
                       </div>
 
-                      {photoAnalysis.items.length > 0 && (
-                        <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 text-[11px] text-slate-300">
-                          <span className="block text-[10px] text-slate-400 font-semibold mb-1">
-                            検出品目・内訳:
-                          </span>
-                          {photoAnalysis.items.map((it, idx) => (
-                            <div key={idx} className="flex justify-between">
-                              <span>• {it.name}</span>
-                              <span className="text-slate-400 font-mono">
-                                {it.calories}kcal (P:{it.protein}g)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div
-                        className={`p-2.5 rounded-xl text-[11px] leading-relaxed ${
-                          photoAnalysis.source === "gemini"
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-200"
-                            : "bg-amber-500/10 border border-amber-500/20 text-amber-200"
-                        }`}
-                      >
-                        {photoAnalysis.confidenceNote}
-                      </div>
-
                       <button
                         type="button"
                         onClick={handleSaveAnalyzedPhotoMeal}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition shadow-lg shadow-teal-950/50"
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition"
                       >
                         <Check className="w-4 h-4" />
                         この内容でIndexedDBに保存する
@@ -899,10 +775,9 @@ export function QuickLogModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">メニュー内容</label>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-medium text-slate-300">
-                        メニュー内容（入力すると自動でカロリー＆PFCを予想します）
+                        メニュー内容（入力すると自動でカロリー＆PFCを予想）
                       </label>
                       <button
                         type="button"
@@ -931,38 +806,6 @@ export function QuickLogModal({
                         💡 {mealEstBadge}
                       </p>
                     )}
-                  </div>
-
-                  {/* よく食べるメニューのワンタップ入力チップ */}
-                  <div className="space-y-1.5">
-                    <span className="block text-[11px] text-slate-400">
-                      ワンタップでメニュー追加（組み合わせ自動計算）:
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        "納豆ご飯",
-                        "鶏むね肉・サラダ",
-                        "焼き鮭・玄米・味噌汁",
-                        "ホエイプロテイン",
-                        "ゆで卵",
-                        "オートミール・ヨーグルト",
-                        "蕎麦",
-                        "カレーライス",
-                        "ラーメン・餃子",
-                      ].map((chip) => (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => {
-                            const next = mealDesc ? `${mealDesc}・${chip}` : chip;
-                            handleMealDescChange(next);
-                          }}
-                          className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800/90 hover:bg-slate-700 text-amber-200 border border-slate-700 transition"
-                        >
-                          + {chip}
-                        </button>
-                      ))}
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-4 gap-2.5">
@@ -1042,9 +885,6 @@ export function QuickLogModal({
                       />
                     </div>
                   </div>
-                  <p className="text-xs text-slate-400">
-                    ※ 保存すると即座にダッシュボードの「7日間移動平均トレンドライン」が再計算されます。
-                  </p>
                   <button
                     type="submit"
                     className="w-full py-3 rounded-2xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-sm transition"
@@ -1101,31 +941,19 @@ export function QuickLogModal({
                     </div>
                   </div>
                   <div>
-                    <label className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-                      <Footprints className="w-3.5 h-3.5 text-emerald-400" />
-                      今日の歩数 (Steps)
-                    </label>
-                    <input
-                      type="number"
-                      value={stepsInput}
-                      onChange={(e) => setStepsInput(e.target.value)}
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-sm text-white"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-xs text-slate-400 mb-1">メモ</label>
                     <input
                       type="text"
                       value={workoutMemo}
                       onChange={(e) => setWorkoutMemo(e.target.value)}
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-sm text-white"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
                     />
                   </div>
                   <button
                     type="submit"
                     className="w-full py-3 rounded-2xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-sm transition"
                   >
-                    運動・活動ログを保存
+                    運動ログを保存
                   </button>
                 </form>
               )}
@@ -1161,7 +989,7 @@ export function QuickLogModal({
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-xs text-slate-400">睡眠時間 (h)</label>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 font-semibold">
-                          自動算出（微調整も可）
+                          自動算出
                         </span>
                       </div>
                       <input
@@ -1192,6 +1020,51 @@ export function QuickLogModal({
                     className="w-full py-3 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-sm transition"
                   >
                     睡眠ログを保存してReadinessを更新
+                  </button>
+                </form>
+              )}
+
+              {activeTab === "activity" && (
+                <form onSubmit={handleSaveActivity} className="space-y-4">
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-200">
+                    歩数と中〜高強度の活動時間を記録します。保存すると本日の総消費カロリー（TDEE）と健康年齢に即時反映されます。
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 mb-1.5 font-semibold">
+                      <Footprints className="w-4 h-4 text-emerald-400" />
+                      本日の歩数 (Steps)
+                    </label>
+                    <input
+                      type="number"
+                      step="100"
+                      required
+                      value={stepsInput}
+                      onChange={(e) => setStepsInput(e.target.value)}
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-lg font-bold text-emerald-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-300 mb-1.5 font-semibold">
+                      <Flame className="w-4 h-4 text-rose-400" />
+                      活動時間 (分)
+                    </label>
+                    <input
+                      type="number"
+                      step="5"
+                      required
+                      value={activeMinutesInput}
+                      onChange={(e) => setActiveMinutesInput(e.target.value)}
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-4 py-3 text-lg font-bold text-rose-400"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition"
+                  >
+                    歩数・活動時間を保存
                   </button>
                 </form>
               )}

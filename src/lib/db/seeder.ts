@@ -6,13 +6,11 @@ import {
   type SleepLog,
   type BodyMetricLog,
   type ActivityLog,
+  formatLocalDate,
 } from "./schema";
 
 function formatDate(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return formatLocalDate(d);
 }
 
 // 擬似乱数（再現性と自然なばらつきのため）
@@ -263,10 +261,27 @@ export async function exportAllDataAsJson(): Promise<string> {
     db.activities.toArray(),
   ]);
 
+  let settings = null;
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem("vital_pulse_user_settings_v1");
+      if (raw) {
+        const parsedSettings = JSON.parse(raw);
+        settings = {
+          ...parsedSettings,
+          geminiApiKey: "", // セキュリティのためマスク
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to read user settings for export", e);
+    }
+  }
+
   return JSON.stringify(
     {
       version: 1,
       exportedAt: new Date().toISOString(),
+      settings,
       data: {
         meals,
         workouts,
@@ -283,11 +298,40 @@ export async function exportAllDataAsJson(): Promise<string> {
 export async function importAllDataFromJson(jsonString: string): Promise<void> {
   const parsed = JSON.parse(jsonString);
   const payload = parsed.data ?? parsed;
+  const importedSettings = parsed.settings ?? payload.settings;
+
+  if (importedSettings && typeof window !== "undefined") {
+    try {
+      let currentApiKey = "";
+      const currentRaw = window.localStorage.getItem("vital_pulse_user_settings_v1");
+      if (currentRaw) {
+        const cur = JSON.parse(currentRaw);
+        currentApiKey = cur.geminiApiKey || "";
+      }
+      const mergedSettings = {
+        ...importedSettings,
+        geminiApiKey: currentApiKey || importedSettings.geminiApiKey || "",
+      };
+      window.localStorage.setItem(
+        "vital_pulse_user_settings_v1",
+        JSON.stringify(mergedSettings)
+      );
+    } catch (e) {
+      console.warn("Failed to merge settings on import", e);
+    }
+  }
 
   await db.transaction(
     "rw",
     [db.meals, db.workouts, db.sleepLogs, db.bodyMetrics, db.activities],
     async () => {
+      // 既存データの読み出し
+      const [existingSleeps, existingMetrics, existingActivities] = await Promise.all([
+        db.sleepLogs.toArray(),
+        db.bodyMetrics.toArray(),
+        db.activities.toArray(),
+      ]);
+
       await Promise.all([
         db.meals.clear(),
         db.workouts.clear(),
@@ -296,11 +340,65 @@ export async function importAllDataFromJson(jsonString: string): Promise<void> {
         db.activities.clear(),
       ]);
 
-      if (Array.isArray(payload.meals)) await db.meals.bulkAdd(payload.meals);
-      if (Array.isArray(payload.workouts)) await db.workouts.bulkAdd(payload.workouts);
-      if (Array.isArray(payload.sleepLogs)) await db.sleepLogs.bulkAdd(payload.sleepLogs);
-      if (Array.isArray(payload.bodyMetrics)) await db.bodyMetrics.bulkAdd(payload.bodyMetrics);
-      if (Array.isArray(payload.activities)) await db.activities.bulkAdd(payload.activities);
+      if (Array.isArray(payload.meals)) {
+        await db.meals.bulkAdd(
+          payload.meals.map(({ id, ...m }: any) => m)
+        );
+      }
+      if (Array.isArray(payload.workouts)) {
+        await db.workouts.bulkAdd(
+          payload.workouts.map(({ id, ...w }: any) => w)
+        );
+      }
+
+      // 1日1件テーブルの重複排除（既存データ + インポートデータ。後から来たインポートデータを優先して最新1件とする）
+      // sleepLogs
+      const sleepMap = new Map<string, Omit<SleepLog, "id">>();
+      for (const s of existingSleeps) {
+        const { id, ...rest } = s;
+        sleepMap.set(s.date, rest);
+      }
+      if (Array.isArray(payload.sleepLogs)) {
+        for (const s of payload.sleepLogs) {
+          const { id, ...rest } = s;
+          sleepMap.set(s.date, rest);
+        }
+      }
+      if (sleepMap.size > 0) {
+        await db.sleepLogs.bulkAdd(Array.from(sleepMap.values()));
+      }
+
+      // bodyMetrics
+      const metricMap = new Map<string, Omit<BodyMetricLog, "id">>();
+      for (const b of existingMetrics) {
+        const { id, ...rest } = b;
+        metricMap.set(b.date, rest);
+      }
+      if (Array.isArray(payload.bodyMetrics)) {
+        for (const b of payload.bodyMetrics) {
+          const { id, ...rest } = b;
+          metricMap.set(b.date, rest);
+        }
+      }
+      if (metricMap.size > 0) {
+        await db.bodyMetrics.bulkAdd(Array.from(metricMap.values()));
+      }
+
+      // activities
+      const activityMap = new Map<string, Omit<ActivityLog, "id">>();
+      for (const a of existingActivities) {
+        const { id, ...rest } = a;
+        activityMap.set(a.date, rest);
+      }
+      if (Array.isArray(payload.activities)) {
+        for (const a of payload.activities) {
+          const { id, ...rest } = a;
+          activityMap.set(a.date, rest);
+        }
+      }
+      if (activityMap.size > 0) {
+        await db.activities.bulkAdd(Array.from(activityMap.values()));
+      }
     }
   );
 }

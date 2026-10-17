@@ -162,15 +162,21 @@ export function ActivityHeatmapAndReport({
     const last7 = calendarDays.slice(-7);
     const prev7 = calendarDays.slice(-14, -7);
 
-    const avg = (arr: typeof last7, fn: (x: (typeof last7)[0]) => number) =>
-      arr.length ? arr.reduce((s, x) => s + fn(x), 0) / arr.length : 0;
+    const avgNonZero = (
+      arr: typeof last7,
+      fn: (x: (typeof last7)[0]) => number
+    ) => {
+      const valid = arr.map(fn).filter((val) => val > 0);
+      if (valid.length === 0) return 0;
+      return valid.reduce((sum, v) => sum + v, 0) / valid.length;
+    };
 
-    const avgReadiness7 = Math.round(avg(last7, (d) => d.readiness || 80));
-    const prevReadiness7 = Math.round(avg(prev7, (d) => d.readiness || 78));
+    const avgReadiness7 = Math.round(avgNonZero(last7, (d) => d.readiness));
+    const prevReadiness7 = Math.round(avgNonZero(prev7, (d) => d.readiness));
 
-    const avgSteps7 = Math.round(avg(last7, (d) => d.steps));
-    const avgProtein7 = Math.round(avg(last7, (d) => d.protein));
-    const avgSleep7 = Number(avg(last7, (d) => d.sleepHours).toFixed(1));
+    const avgSteps7 = Math.round(avgNonZero(last7, (d) => d.steps));
+    const avgProtein7 = Math.round(avgNonZero(last7, (d) => d.protein));
+    const avgSleep7 = Number(avgNonZero(last7, (d) => d.sleepHours).toFixed(1));
     const workoutDays7 = last7.filter((d) => d.workoutCal > 0).length;
 
     // 7日間の体重変化
@@ -188,7 +194,7 @@ export function ActivityHeatmapAndReport({
 
     return {
       avgReadiness7,
-      readinessDiff: avgReadiness7 - prevReadiness7,
+      readinessDiff: prevReadiness7 > 0 ? avgReadiness7 - prevReadiness7 : 0,
       avgSteps7,
       avgProtein7,
       avgSleep7,

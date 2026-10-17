@@ -34,7 +34,12 @@ import {
   Sliders,
   Camera,
 } from "lucide-react";
-import { db } from "@/lib/db/schema";
+import {
+  db,
+  formatLocalDate,
+  addDaysToDateStr,
+  recalculateAndSaveReadiness,
+} from "@/lib/db/schema";
 import { seedThirtyDaysDemoData } from "@/lib/db/seeder";
 import {
   DEFAULT_USER_SETTINGS,
@@ -50,16 +55,8 @@ import { GoalsAndAiSettingsModal } from "@/components/GoalsAndAiSettingsModal";
 import { BioAgeAndMetabolicCard } from "@/components/BioAgeAndMetabolicCard";
 import { SleepTrendChartCard } from "@/components/SleepTrendChartCard";
 
-function getTodayDateString(): string {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export default function HealthDashboardPage() {
-  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString());
+  const [selectedDate, setSelectedDate] = useState<string>(formatLocalDate());
   const [quickLogOpen, setQuickLogOpen] = useState(false);
   const [quickLogTab, setQuickLogTab] = useState<QuickLogTab>("ai");
   const [dataModalOpen, setDataModalOpen] = useState(false);
@@ -114,13 +111,15 @@ export default function HealthDashboardPage() {
   // 利用可能な日付リスト
   const availableDates = useMemo(() => {
     const set = new Set<string>([
-      getTodayDateString(),
+      formatLocalDate(),
       ...bodyMetrics.map((b) => b.date),
       ...sleepLogs.map((s) => s.date),
       ...activities.map((a) => a.date),
+      ...meals.map((m) => m.date),
+      ...workouts.map((w) => w.date),
     ]);
     return Array.from(set).sort();
-  }, [bodyMetrics, sleepLogs, activities]);
+  }, [bodyMetrics, sleepLogs, activities, meals, workouts]);
 
   // 選択中の日付のデータ
   const todayMeals = useMemo(
@@ -145,8 +144,17 @@ export default function HealthDashboardPage() {
   );
 
   // 1. Readiness スコア & アドバイス
-  const readinessScore = todayActivity?.readinessScore ?? 84;
+  const readinessScore = todayActivity?.readinessScore ?? 0;
   const readinessInfo = useMemo(() => {
+    if (readinessScore <= 0) {
+      return {
+        status: "NO DATA",
+        color: "#64748b",
+        badgeBg: "bg-slate-800 text-slate-400 border-slate-700",
+        advice:
+          "本日のデータが未記録です。睡眠や体重、運動を記録するとReadinessスコアが自動算出されます。",
+      };
+    }
     if (readinessScore >= 85) {
       return {
         status: "OPTIMAL PEAK",
@@ -176,11 +184,22 @@ export default function HealthDashboardPage() {
 
   // 2. 体重トレンドグラフ（生データ + 7日間移動平均線）
   const weightChartData = useMemo(() => {
-    const sorted = [...bodyMetrics].sort((a, b) => a.date.localeCompare(b.date));
-    return sorted.map((item, idx) => {
-      const windowSlice = sorted.slice(Math.max(0, idx - 6), idx + 1);
+    const deduplicatedMap = new Map<string, (typeof bodyMetrics)[0]>();
+    for (const b of bodyMetrics) {
+      deduplicatedMap.set(b.date, b);
+    }
+    const sorted = Array.from(deduplicatedMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+
+    return sorted.map((item) => {
+      const minDate = addDaysToDateStr(item.date, -6);
+      const windowSlice = sorted.filter(
+        (record) => record.date >= minDate && record.date <= item.date
+      );
       const avg7d =
-        windowSlice.reduce((sum, cur) => sum + cur.weightKg, 0) / windowSlice.length;
+        windowSlice.reduce((sum, cur) => sum + cur.weightKg, 0) /
+        windowSlice.length;
       return {
         date: item.date.slice(5), // MM-DD
         fullDate: item.date,
@@ -216,10 +235,35 @@ export default function HealthDashboardPage() {
     };
   }, [todayMeals, settings]);
 
-  // 4. 連続記録ストリーク日数
+  const recordedDatesSet = useMemo(() => {
+    return new Set<string>([
+      ...bodyMetrics.map((b) => b.date),
+      ...sleepLogs.map((s) => s.date),
+      ...activities.map((a) => a.date),
+      ...meals.map((m) => m.date),
+      ...workouts.map((w) => w.date),
+    ]);
+  }, [bodyMetrics, sleepLogs, activities, meals, workouts]);
+
+  // 4. 連続記録ストリーク日数（今日または昨日から過去へ連続して記録が存在する日数）
   const streakDays = useMemo(() => {
-    return availableDates.length;
-  }, [availableDates]);
+    const today = formatLocalDate();
+    const yesterday = addDaysToDateStr(today, -1);
+
+    let checkDate = recordedDatesSet.has(today)
+      ? today
+      : recordedDatesSet.has(yesterday)
+      ? yesterday
+      : null;
+    if (!checkDate) return 0;
+
+    let streak = 0;
+    while (recordedDatesSet.has(checkDate)) {
+      streak++;
+      checkDate = addDaysToDateStr(checkDate, -1);
+    }
+    return streak;
+  }, [recordedDatesSet]);
 
   const openQuickModal = (tab: QuickLogTab) => {
     setQuickLogTab(tab);
@@ -227,10 +271,7 @@ export default function HealthDashboardPage() {
   };
 
   const shiftSelectedDate = (delta: number) => {
-    const currentIndex = availableDates.indexOf(selectedDate);
-    if (currentIndex === -1) return;
-    const nextIdx = Math.max(0, Math.min(availableDates.length - 1, currentIndex + delta));
-    setSelectedDate(availableDates[nextIdx]);
+    setSelectedDate((prev) => addDaysToDateStr(prev, delta));
   };
 
   const handleDeleteMeal = async (id?: number) => {
@@ -239,11 +280,21 @@ export default function HealthDashboardPage() {
     showToast("食事ログを削除しました");
   };
 
+  const handleDeleteWorkout = async (id?: number) => {
+    if (!id) return;
+    await db.workouts.delete(id);
+    const nextDate = addDaysToDateStr(selectedDate, 1);
+    await recalculateAndSaveReadiness(nextDate);
+    showToast("ワークアウトログを削除し、翌日Readinessを再計算しました");
+  };
+
   // Readiness SVG Circle constants
   const circleRadius = 64;
   const circleCircumference = 2 * Math.PI * circleRadius;
   const strokeDashoffset =
-    circleCircumference - (readinessScore / 100) * circleCircumference;
+    readinessScore > 0
+      ? circleCircumference - (readinessScore / 100) * circleCircumference
+      : circleCircumference;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 pb-28 relative overflow-x-hidden">
@@ -403,7 +454,7 @@ export default function HealthDashboardPage() {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                 <span className="text-4xl font-black tracking-tight text-white">
-                  {readinessScore}
+                  {readinessScore > 0 ? readinessScore : "--"}
                 </span>
                 <span className="text-[11px] font-medium text-slate-400 uppercase tracking-widest mt-0.5">
                   SCORE / 100
@@ -417,13 +468,15 @@ export default function HealthDashboardPage() {
                 <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/70 flex items-center justify-between">
                   <span className="text-slate-400">睡眠回復</span>
                   <span className="font-bold text-indigo-300">
-                    {todaySleep ? `${todaySleep.durationHours}h` : "7.5h"}
+                    {todaySleep ? `${todaySleep.durationHours}h` : "--"}
                   </span>
                 </div>
                 <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/70 flex items-center justify-between">
                   <span className="text-slate-400">活動バランス</span>
                   <span className="font-bold text-emerald-300">
-                    {todayActivity ? `${todayActivity.activeMinutes}分` : "55分"}
+                    {todayActivity && todayActivity.activeMinutes > 0
+                      ? `${todayActivity.activeMinutes}分`
+                      : "--"}
                   </span>
                 </div>
               </div>
@@ -779,7 +832,9 @@ export default function HealthDashboardPage() {
 
               <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800/80 text-center my-2">
                 <span className="text-3xl font-black text-indigo-300">
-                  {todaySleep?.durationHours ?? 7.5}
+                  {todaySleep?.durationHours != null
+                    ? todaySleep.durationHours
+                    : "--"}
                 </span>
                 <span className="text-sm text-slate-400 ml-1">
                   / {settings.targetSleepHours}h
@@ -789,14 +844,14 @@ export default function HealthDashboardPage() {
                     <span
                       key={star}
                       className={`w-2.5 h-2.5 rounded-full ${
-                        star <= (todaySleep?.qualityScore ?? 4)
+                        star <= (todaySleep?.qualityScore ?? 0)
                           ? "bg-indigo-400"
                           : "bg-slate-800"
                       }`}
                     />
                   ))}
                   <span className="text-[11px] text-slate-400 ml-1.5">
-                    質 Lv.{todaySleep?.qualityScore ?? 4}/5
+                    質 Lv.{todaySleep?.qualityScore ?? "-"}/5
                   </span>
                 </div>
               </div>
@@ -805,13 +860,13 @@ export default function HealthDashboardPage() {
                 <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/70">
                   <span className="block text-[10px] text-slate-400">就寝時刻</span>
                   <span className="text-sm font-bold text-slate-100 mt-0.5 block font-mono">
-                    {todaySleep?.bedTime ?? "23:15"}
+                    {todaySleep?.bedTime || "--:--"}
                   </span>
                 </div>
                 <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800/70">
                   <span className="block text-[10px] text-slate-400">起床時刻</span>
                   <span className="text-sm font-bold text-slate-100 mt-0.5 block font-mono">
-                    {todaySleep?.wakeTime ?? "06:45"}
+                    {todaySleep?.wakeTime || "--:--"}
                   </span>
                 </div>
               </div>
@@ -860,7 +915,7 @@ export default function HealthDashboardPage() {
                     <span>歩数 (Steps)</span>
                   </div>
                   <p className="text-2xl font-black text-white mt-1">
-                    {(todayActivity?.steps ?? 8940).toLocaleString()}
+                    {(todayActivity?.steps ?? 0).toLocaleString()}
                   </p>
                   <p className="text-[11px] text-slate-400">
                     目標 {settings.targetSteps.toLocaleString()}歩
@@ -873,7 +928,7 @@ export default function HealthDashboardPage() {
                     <span>活動時間</span>
                   </div>
                   <p className="text-2xl font-black text-white mt-1">
-                    {todayActivity?.activeMinutes ?? 55}
+                    {todayActivity?.activeMinutes ?? 0}
                     <span className="text-xs font-normal text-slate-400 ml-1">分</span>
                   </p>
                   <p className="text-[11px] text-slate-400">中〜高強度ゾーン</p>
@@ -900,9 +955,19 @@ export default function HealthDashboardPage() {
                           <Zap className="w-3.5 h-3.5 text-rose-400" />
                           {w.type}
                         </span>
-                        <span className="font-bold text-rose-300">
-                          -{w.caloriesBurned} kcal ({w.durationMinutes}分)
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-rose-300">
+                            -{w.caloriesBurned} kcal ({w.durationMinutes}分)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteWorkout(w.id)}
+                            className="text-slate-500 hover:text-rose-400 transition"
+                            title="削除"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                       {w.memo && (
                         <p className="text-[11px] text-slate-400 line-clamp-1">{w.memo}</p>
@@ -917,7 +982,7 @@ export default function HealthDashboardPage() {
               <span>総消費アクティブカロリー</span>
               <span className="font-bold text-rose-400">
                 {todayWorkouts.reduce((s, w) => s + w.caloriesBurned, 0) +
-                  Math.round((todayActivity?.steps ?? 8000) * 0.035)}{" "}
+                  Math.round((todayActivity?.steps ?? 0) * 0.035)}{" "}
                 kcal
               </span>
             </div>
@@ -939,8 +1004,8 @@ export default function HealthDashboardPage() {
           }
           intakeCalories={nutritionSummary.totalCal}
           workoutCalories={todayWorkouts.reduce((s, w) => s + w.caloriesBurned, 0)}
-          steps={todayActivity?.steps ?? 8000}
-          sleepHours={todaySleep?.durationHours ?? 7.5}
+          steps={todayActivity?.steps ?? 0}
+          sleepHours={todaySleep?.durationHours ?? 0}
           readinessScore={readinessScore}
           onOpenProfileSettings={() => setGoalsModalOpen(true)}
         />
@@ -1043,6 +1108,15 @@ export default function HealthDashboardPage() {
           >
             <Moon className="w-4 h-4 text-indigo-400" />
             <span className="hidden sm:inline">睡眠</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => openQuickModal("activity")}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl hover:bg-slate-800 text-xs font-semibold text-slate-200 transition"
+          >
+            <Footprints className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">歩数</span>
           </button>
         </motion.div>
       </div>

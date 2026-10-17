@@ -115,11 +115,12 @@ export function estimateNutritionFromMealText(text: string): EstimatedMealNutrit
   );
 
   for (const entry of sortedDict) {
-    const hitKw = entry.keywords.find((kw) => remainingText.includes(kw.toLowerCase()));
+    const sortedKeywords = [...entry.keywords].sort((a, b) => b.length - a.length);
+    const hitKw = sortedKeywords.find((kw) => remainingText.includes(kw.toLowerCase()));
     if (hitKw) {
       matched.push(entry);
       // マッチしたキーワード部分を消費して二重カウントを防ぐ
-      remainingText = remainingText.replace(hitKw.toLowerCase(), " ");
+      remainingText = remainingText.replaceAll(hitKw.toLowerCase(), " ");
     }
   }
 
@@ -188,7 +189,11 @@ JSON形式:
   "items": ["内訳品目1", "内訳品目2"]
 }`;
 
-    const modelsToTry = ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
+    const modelsToTry = [
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-2.0-flash",
+    ];
     for (const model of modelsToTry) {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
@@ -241,11 +246,27 @@ export function parseNaturalHealthInput(text: string): ParsedVoiceCommand[] {
     .trim();
 
   // 1. 体重・体脂肪の抽出
-  const weightMatch = normalized.match(/(?:体重\s*)?(\d{2,3}(?:\.\d+)?)\s*(?:kg|キロ|ｷﾛ)/i);
+  const exerciseKeywords = ["ランニング", "走", "ベンチ", "スクワット", "ダンベル", "筋トレ", "挙上"];
+  const hasExerciseKeyword = exerciseKeywords.some((kw) => normalized.includes(kw));
+
+  const explicitWeightMatch = normalized.match(/(?:体重|今朝は|計測)\s*(\d{2,3}(?:\.\d+)?)\s*(?:kg|キロ|ｷﾛ)/i);
+  const generalWeightMatch = normalized.match(/(\d{2,3}(?:\.\d+)?)\s*(?:kg|キロ|ｷﾛ)/i);
+
+  let extractedWeight: number | null = null;
+  if (explicitWeightMatch) {
+    const val = parseFloat(explicitWeightMatch[1]);
+    if (!isNaN(val)) extractedWeight = val;
+  } else if (!hasExerciseKeyword && generalWeightMatch) {
+    const val = parseFloat(generalWeightMatch[1]);
+    if (!isNaN(val) && val >= 35 && val <= 180) {
+      extractedWeight = val;
+    }
+  }
+
   const fatMatch = normalized.match(/(?:体脂肪(?:率)?\s*)?(\d{1,2}(?:\.\d+)?)\s*(?:%|パーセント|ﾊﾟｰｾﾝﾄ)/i);
 
-  if (weightMatch) {
-    const weightKg = parseFloat(weightMatch[1]);
+  if (extractedWeight !== null) {
+    const weightKg = extractedWeight;
     const bodyFatPercentage = fatMatch ? parseFloat(fatMatch[1]) : 17.5;
     results.push({
       category: "body",
@@ -323,7 +344,7 @@ export function parseNaturalHealthInput(text: string): ParsedVoiceCommand[] {
         fat: est.fat,
         carbs: est.carbs,
       });
-    } else if (!weightMatch && !matchedWorkout && !sleepMatch) {
+    } else if (extractedWeight === null && !matchedWorkout && !sleepMatch) {
       const cleanDesc =
         normalized
           .replace(/(朝ごはん|朝食|昼ごはん|昼食|夜ごはん|夕食|に|を|食べた|飲んだ)/g, "")

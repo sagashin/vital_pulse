@@ -12,12 +12,13 @@ import {
   ReferenceLine,
 } from "recharts";
 import { Sparkles, TrendingUp, ArrowRightLeft } from "lucide-react";
-import type {
-  MealLog,
-  WorkoutLog,
-  SleepLog,
-  BodyMetricLog,
-  ActivityLog,
+import {
+  type MealLog,
+  type WorkoutLog,
+  type SleepLog,
+  type BodyMetricLog,
+  type ActivityLog,
+  addDaysToDateStr,
 } from "@/lib/db/schema";
 
 interface CorrelationAnalyzerProps {
@@ -86,6 +87,8 @@ export function CorrelationAnalyzer({
         ...sleepLogs.map((s) => s.date),
         ...bodyMetrics.map((b) => b.date),
         ...activities.map((a) => a.date),
+        ...meals.map((m) => m.date),
+        ...workouts.map((w) => w.date),
       ])
     ).sort();
 
@@ -103,13 +106,13 @@ export function CorrelationAnalyzer({
     const bodyByDate = Object.fromEntries(bodyMetrics.map((b) => [b.date, b]));
     const actByDate = Object.fromEntries(activities.map((a) => [a.date, a]));
 
-    return dates.map((date, idx) => {
-      const nextDate = dates[idx + 1];
+    return dates.map((date) => {
+      const actualNextDate = addDaysToDateStr(date, 1);
       return {
         date,
         sleepHours: sleepByDate[date]?.durationHours ?? 0,
         sameDayCalories: mealCalByDate[date] ?? 0,
-        nextDayCalories: nextDate ? mealCalByDate[nextDate] ?? 0 : 0,
+        nextDayCalories: mealCalByDate[actualNextDate] ?? 0,
         workoutCalories: workoutCalByDate[date] ?? 0,
         steps: actByDate[date]?.steps ?? 0,
         readinessScore: actByDate[date]?.readinessScore ?? 0,
@@ -140,9 +143,16 @@ export function CorrelationAnalyzer({
         highSleepDays.reduce((s, d) => s + d.nextDayCalories, 0) / highSleepDays.length;
       const avgLowCal =
         lowSleepDays.reduce((s, d) => s + d.nextDayCalories, 0) / lowSleepDays.length;
-      const diffPct = Math.abs(Math.round(((avgLowCal - avgHighCal) / avgLowCal) * 100));
 
-      return `睡眠時間が7時間以上の翌日は、7時間未満の日と比べて平均摂取カロリーが約${Math.max(8, diffPct)}%（${Math.round(avgHighCal)}kcal vs ${Math.round(avgLowCal)}kcal）抑えられており、ホルモンバランスと食欲制御が安定しています。`;
+      if (avgHighCal < avgLowCal) {
+        const diffPct = Math.round(((avgLowCal - avgHighCal) / avgLowCal) * 100);
+        return `睡眠時間が7時間以上の翌日は、7時間未満の日と比べて平均摂取カロリーが約${diffPct}%（${Math.round(avgHighCal)}kcal vs ${Math.round(avgLowCal)}kcal）抑えられており、ホルモンバランスと食欲制御が安定しています。`;
+      } else if (avgHighCal > avgLowCal) {
+        const diffPct = Math.round(((avgHighCal - avgLowCal) / avgLowCal) * 100);
+        return `睡眠時間が7時間以上の翌日は、7時間未満の日と比べて平均摂取カロリーが約${diffPct}%（${Math.round(avgHighCal)}kcal vs ${Math.round(avgLowCal)}kcal）多く、活動量やエネルギー代謝の活発さが反映されています。`;
+      } else {
+        return `睡眠時間が7時間以上の日と7時間未満の日で、翌日の平均摂取カロリー（${Math.round(avgHighCal)}kcal）に顕著な差は見られません。`;
+      }
     }
     return "データが蓄積されるほど、睡眠・運動・栄養の統計的なクロス相関がここに自動抽出されます。";
   }, [dailyRecords]);

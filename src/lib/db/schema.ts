@@ -101,3 +101,161 @@ export function calculateReadinessScore(
   return Math.max(25, Math.min(99, durationPoints + qualityPoints + recoveryBalance));
 }
 
+/**
+ * ローカルタイムゾーン基準で YYYY-MM-DD 文字列を返す
+ */
+export function formatLocalDate(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * YYYY-MM-DD 文字列と日数差分を受け取り、タイムゾーン安全に日付を加算した YYYY-MM-DD を返す
+ */
+export function addDaysToDateStr(dateStr: string, deltaDays: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + deltaDays);
+  return formatLocalDate(dt);
+}
+
+/**
+ * 指定日の睡眠データと前日運動ログからReadinessスコアを自動再計算して activities テーブルを更新/作成する
+ */
+export async function recalculateAndSaveReadiness(date: string): Promise<number> {
+  const sleepRecords = await db.sleepLogs.where("date").equals(date).toArray();
+  const sleep = sleepRecords[sleepRecords.length - 1];
+  const sleepHours = sleep ? sleep.durationHours : 7.0;
+  const sleepQuality = sleep ? sleep.qualityScore : 3;
+
+  const prevDate = addDaysToDateStr(date, -1);
+  const prevWorkouts = await db.workouts.where("date").equals(prevDate).toArray();
+  const prevWorkoutCalories = prevWorkouts.reduce((sum, w) => sum + (w.caloriesBurned || 0), 0);
+
+  const prevActivities = await db.activities.where("date").equals(prevDate).toArray();
+  const prevActiveMinutes = prevActivities[prevActivities.length - 1]?.activeMinutes || 0;
+
+  const score = calculateReadinessScore(
+    sleepHours,
+    sleepQuality,
+    prevWorkoutCalories,
+    prevActiveMinutes
+  );
+
+  const existingActivities = await db.activities.where("date").equals(date).toArray();
+  if (existingActivities.length > 0) {
+    const primary = existingActivities[0];
+    if (primary.id) {
+      await db.activities.update(primary.id, { readinessScore: score });
+    }
+    // 重複レコードがあれば削除
+    for (let i = 1; i < existingActivities.length; i++) {
+      if (existingActivities[i].id) {
+        await db.activities.delete(existingActivities[i].id!);
+      }
+    }
+  } else {
+    await db.activities.add({
+      date,
+      steps: 0,
+      activeMinutes: 0,
+      readinessScore: score,
+    });
+  }
+
+  return score;
+}
+
+/**
+ * bodyMetrics テーブルの1日1件安全なUpsert
+ */
+export async function upsertBodyMetric(
+  date: string,
+  weightKg: number,
+  bodyFatPercentage: number
+): Promise<void> {
+  const existing = await db.bodyMetrics.where("date").equals(date).toArray();
+  if (existing.length > 0) {
+    if (existing[0].id) {
+      await db.bodyMetrics.update(existing[0].id, {
+        weightKg,
+        bodyFatPercentage,
+      });
+    }
+    for (let i = 1; i < existing.length; i++) {
+      if (existing[i].id) {
+        await db.bodyMetrics.delete(existing[i].id!);
+      }
+    }
+  } else {
+    await db.bodyMetrics.add({
+      date,
+      weightKg,
+      bodyFatPercentage,
+    });
+  }
+}
+
+/**
+ * sleepLogs テーブルの1日1件安全なUpsert ＆ Readiness自動再計算
+ */
+export async function upsertSleepLog(log: Omit<SleepLog, "id">): Promise<void> {
+  const existing = await db.sleepLogs.where("date").equals(log.date).toArray();
+  if (existing.length > 0) {
+    if (existing[0].id) {
+      await db.sleepLogs.update(existing[0].id, {
+        bedTime: log.bedTime,
+        wakeTime: log.wakeTime,
+        durationHours: log.durationHours,
+        qualityScore: log.qualityScore,
+      });
+    }
+    for (let i = 1; i < existing.length; i++) {
+      if (existing[i].id) {
+        await db.sleepLogs.delete(existing[i].id!);
+      }
+    }
+  } else {
+    await db.sleepLogs.add({
+      date: log.date,
+      bedTime: log.bedTime,
+      wakeTime: log.wakeTime,
+      durationHours: log.durationHours,
+      qualityScore: log.qualityScore,
+    });
+  }
+  await recalculateAndSaveReadiness(log.date);
+}
+
+/**
+ * activities テーブルの1日1件安全なUpsert ＆ Readiness自動再計算
+ */
+export async function upsertActivityLog(
+  date: string,
+  steps: number,
+  activeMinutes: number
+): Promise<void> {
+  const existing = await db.activities.where("date").equals(date).toArray();
+  if (existing.length > 0) {
+    if (existing[0].id) {
+      await db.activities.update(existing[0].id, {
+        steps,
+        activeMinutes,
+      });
+    }
+    for (let i = 1; i < existing.length; i++) {
+      if (existing[i].id) {
+        await db.activities.delete(existing[i].id!);
+      }
+    }
+  } else {
+    await db.activities.add({
+      date,
+      steps,
+      activeMinutes,
+      readinessScore: 75,
+    });
+  }
+  await recalculateAndSaveReadiness(date);
+}

@@ -45,10 +45,15 @@ export function loadUserSettings(): UserGoalsAndSettings {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_USER_SETTINGS;
     const parsed = JSON.parse(raw);
-    if (
-      parsed.geminiModel === "gemini-2.5-flash" ||
-      parsed.geminiModel === "gemini-1.5-flash"
-    ) {
+    const invalidModels = [
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-1.5-flash",
+    ];
+    if (invalidModels.includes(parsed.geminiModel)) {
       parsed.geminiModel = "auto";
     }
     return {

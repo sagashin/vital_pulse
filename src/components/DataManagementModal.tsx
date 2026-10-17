@@ -18,6 +18,7 @@ import {
   exportAllDataAsJson,
   importAllDataFromJson,
 } from "@/lib/db/seeder";
+import { formatLocalDate } from "@/lib/db/schema";
 
 interface DataManagementModalProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export function DataManagementModal({
       const blob = new Blob([jsonStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = formatLocalDate();
       a.href = url;
       a.download = `vitalpulse-backup-${todayStr}.json`;
       a.click();
