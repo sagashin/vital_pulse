@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState, useEffect } from "react";
+import React, { useRef, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -49,6 +49,124 @@ export type QuickLogTab =
   | "workout"
   | "sleep"
   | "activity";
+
+export interface WorkoutTypePreset {
+  category: string;
+  name: string;
+  mets: number;
+  defaultIntensity: 1 | 2 | 3 | 4 | 5;
+  defaultMinutes: number;
+  sampleMemo: string;
+}
+
+export const WORKOUT_TYPE_PRESETS: WorkoutTypePreset[] = [
+  {
+    category: "有酸素運動",
+    name: "ウォーキング・散歩",
+    mets: 3.5,
+    defaultIntensity: 2,
+    defaultMinutes: 30,
+    sampleMemo: "テンポよく軽快にウォーキング",
+  },
+  {
+    category: "有酸素運動",
+    name: "ジョギング・ランニング",
+    mets: 7.5,
+    defaultIntensity: 4,
+    defaultMinutes: 30,
+    sampleMemo: "心拍ゾーン2〜3で安定走行",
+  },
+  {
+    category: "有酸素運動",
+    name: "サイクリング・エアロバイク",
+    mets: 6.0,
+    defaultIntensity: 3,
+    defaultMinutes: 40,
+    sampleMemo: "ケイデンス一定で巡航",
+  },
+  {
+    category: "有酸素運動",
+    name: "水泳 (クロール・平泳ぎ)",
+    mets: 7.0,
+    defaultIntensity: 4,
+    defaultMinutes: 40,
+    sampleMemo: "フォームを意識して長距離スイム",
+  },
+  {
+    category: "筋力トレーニング",
+    name: "ウェイトトレーニング (ジム/ダンベル)",
+    mets: 5.5,
+    defaultIntensity: 4,
+    defaultMinutes: 45,
+    sampleMemo: "主要種目をしっかり追い込み",
+  },
+  {
+    category: "筋力トレーニング",
+    name: "自重筋トレ・体幹コア",
+    mets: 4.0,
+    defaultIntensity: 3,
+    defaultMinutes: 30,
+    sampleMemo: "プランク・腕立て・スクワット中心",
+  },
+  {
+    category: "筋力トレーニング",
+    name: "HIIT・タバタ・サーキット",
+    mets: 9.0,
+    defaultIntensity: 5,
+    defaultMinutes: 20,
+    sampleMemo: "全力ダッシュ＆インターバル",
+  },
+  {
+    category: "コンディショニング",
+    name: "ヨガ・ピラティス・ストレッチ",
+    mets: 3.0,
+    defaultIntensity: 2,
+    defaultMinutes: 30,
+    sampleMemo: "呼吸と柔軟性を高めるモビリティ",
+  },
+  {
+    category: "スポーツ",
+    name: "球技 (テニス・バスケ・サッカー等)",
+    mets: 7.5,
+    defaultIntensity: 4,
+    defaultMinutes: 60,
+    sampleMemo: "ゲーム練習・フットワーク",
+  },
+  {
+    category: "その他",
+    name: "その他 (手動入力)",
+    mets: 4.5,
+    defaultIntensity: 3,
+    defaultMinutes: 30,
+    sampleMemo: "",
+  },
+];
+
+export const INTENSITY_PRESETS: {
+  value: 1 | 2 | 3 | 4 | 5;
+  label: string;
+  multiplier: number;
+}[] = [
+  { value: 1, label: "Lv.1 - 非常に軽い（ゆったり散歩・リフレッシュ）", multiplier: 0.75 },
+  { value: 2, label: "Lv.2 - 軽い（早歩き・軽いストレッチ・低負荷）", multiplier: 0.88 },
+  { value: 3, label: "Lv.3 - 中程度（自重トレ・息が弾む・通常ペース）", multiplier: 1.0 },
+  { value: 4, label: "Lv.4 - ややきつい（筋トレ追い込み・ジョギング）", multiplier: 1.2 },
+  { value: 5, label: "Lv.5 - かなりきつい（全力HIIT・限界・息が上がる）", multiplier: 1.4 },
+];
+
+export function computeWorkoutCalories(
+  mets: number,
+  intensityLvl: 1 | 2 | 3 | 4 | 5,
+  minutes: number,
+  weightKg: number
+): number {
+  const intensityObj = INTENSITY_PRESETS.find((i) => i.value === intensityLvl);
+  const mult = intensityObj ? intensityObj.multiplier : 1.0;
+  const effectiveMets = mets * mult;
+  const safeWeight = weightKg > 0 ? weightKg : 65.0;
+  const safeMinutes = Math.max(1, minutes);
+  return Math.round(1.05 * effectiveMets * safeWeight * (safeMinutes / 60));
+}
 
 interface QuickLogModalProps {
   isOpen: boolean;
@@ -126,11 +244,60 @@ export function QuickLogModal({
   }, [isOpen, activeTab, recordDate]);
 
   // Workout Form State
-  const [workoutType, setWorkoutType] = useState("上半身ストレングス＆コア");
+  const [selectedPresetName, setSelectedPresetName] = useState<string>("ウェイトトレーニング (ジム/ダンベル)");
+  const [customWorkoutName, setCustomWorkoutName] = useState("");
+  const [workoutType, setWorkoutType] = useState("ウェイトトレーニング (ジム/ダンベル)");
   const [durationMin, setDurationMin] = useState("45");
   const [intensity, setIntensity] = useState<1 | 2 | 3 | 4 | 5>(4);
   const [caloriesBurned, setCaloriesBurned] = useState("320");
-  const [workoutMemo, setWorkoutMemo] = useState("フォーム重視で高密度トレーニング");
+  const [workoutMemo, setWorkoutMemo] = useState("主要種目をしっかり追い込み");
+
+  const currentCalcWeight = useMemo(() => {
+    const num = parseFloat(weightKg);
+    return !isNaN(num) && num > 0 ? num : settings.targetWeightKg || 65.0;
+  }, [weightKg, settings.targetWeightKg]);
+
+  const currentPreset = useMemo(() => {
+    return (
+      WORKOUT_TYPE_PRESETS.find((p) => p.name === selectedPresetName) ||
+      WORKOUT_TYPE_PRESETS[0]
+    );
+  }, [selectedPresetName]);
+
+  const handleSelectWorkoutPreset = (presetName: string) => {
+    setSelectedPresetName(presetName);
+    const p = WORKOUT_TYPE_PRESETS.find((item) => item.name === presetName);
+    if (!p) return;
+
+    if (presetName === "その他 (手動入力)") {
+      setWorkoutType(customWorkoutName || "ワークアウト");
+    } else {
+      setWorkoutType(p.name);
+      setIntensity(p.defaultIntensity);
+      const mins = Number(durationMin) || p.defaultMinutes;
+      const kcal = computeWorkoutCalories(p.mets, p.defaultIntensity, mins, currentCalcWeight);
+      setCaloriesBurned(String(kcal));
+      if (!workoutMemo || workoutMemo === "フォーム重視で高密度トレーニング") {
+        setWorkoutMemo(p.sampleMemo);
+      }
+    }
+  };
+
+  const handleIntensityChange = (lvl: 1 | 2 | 3 | 4 | 5) => {
+    setIntensity(lvl);
+    const mins = Number(durationMin) || 30;
+    const kcal = computeWorkoutCalories(currentPreset.mets, lvl, mins, currentCalcWeight);
+    setCaloriesBurned(String(kcal));
+  };
+
+  const handleDurationChange = (newMin: string) => {
+    setDurationMin(newMin);
+    const mins = Number(newMin) || 0;
+    if (mins > 0) {
+      const kcal = computeWorkoutCalories(currentPreset.mets, intensity, mins, currentCalcWeight);
+      setCaloriesBurned(String(kcal));
+    }
+  };
 
   // Sleep Form State
   const [bedTime, setBedTime] = useState("23:15");
@@ -896,64 +1063,152 @@ export function QuickLogModal({
 
               {activeTab === "workout" && (
                 <form onSubmit={handleSaveWorkout} className="space-y-4">
+                  {/* 種目プルダウン選択 */}
                   <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">トレーニング種目</label>
-                    <input
-                      type="text"
-                      required
-                      value={workoutType}
-                      onChange={(e) => setWorkoutType(e.target.value)}
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
-                    />
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">時間 (分)</label>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                      <span>トレーニング種目（プルダウン選択）</span>
+                      <span className="text-[11px] text-rose-400 font-semibold">METs連動</span>
+                    </label>
+                    <select
+                      value={selectedPresetName}
+                      onChange={(e) => handleSelectWorkoutPreset(e.target.value)}
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
+                    >
+                      {Array.from(new Set(WORKOUT_TYPE_PRESETS.map((p) => p.category))).map((cat) => (
+                        <optgroup key={cat} label={`── ${cat} ──`} className="bg-slate-900 text-slate-300">
+                          {WORKOUT_TYPE_PRESETS.filter((p) => p.category === cat).map((p) => (
+                            <option key={p.name} value={p.name} className="bg-slate-950 text-white">
+                              {p.name} ({p.mets} METs)
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+
+                    {/* 詳細名・自由入力 */}
+                    <div className="mt-2">
                       <input
-                        type="number"
-                        value={durationMin}
-                        onChange={(e) => setDurationMin(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        type="text"
+                        required
+                        value={workoutType}
+                        onChange={(e) => {
+                          setWorkoutType(e.target.value);
+                          if (selectedPresetName === "その他 (手動入力)") {
+                            setCustomWorkoutName(e.target.value);
+                          }
+                        }}
+                        placeholder="種目の詳細（例: ベンチプレス＆ダンベルロウ、5kmランニング）"
+                        className="w-full rounded-xl bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500/50"
                       />
                     </div>
+                  </div>
+
+                  {/* 強度プルダウン選択 */}
+                  <div>
+                    <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                      運動強度（プルダウン選択）
+                    </label>
+                    <select
+                      value={intensity}
+                      onChange={(e) =>
+                        handleIntensityChange(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)
+                      }
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
+                    >
+                      {INTENSITY_PRESETS.map((opt) => (
+                        <option key={opt.value} value={opt.value} className="bg-slate-950 text-white">
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 時間 & 消費カロリー */}
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">消費kcal</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400">時間 (分)</label>
+                        <div className="flex gap-1">
+                          {[15, 30, 45, 60].map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => handleDurationChange(String(m))}
+                              className="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white hover:bg-slate-700 transition"
+                            >
+                              {m}分
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <input
                         type="number"
+                        min="1"
+                        value={durationMin}
+                        onChange={(e) => handleDurationChange(e.target.value)}
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-rose-400 font-medium">消費kcal</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const kcal = computeWorkoutCalories(
+                              currentPreset.mets,
+                              intensity,
+                              Number(durationMin) || 30,
+                              currentCalcWeight
+                            );
+                            setCaloriesBurned(String(kcal));
+                          }}
+                          className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-0.5"
+                          title="METs × 体重から再計算"
+                        >
+                          <Sparkles className="w-2.5 h-2.5" />
+                          自動再計算
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
                         value={caloriesBurned}
                         onChange={(e) => setCaloriesBurned(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-rose-400 font-bold"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs text-slate-400 mb-1">強度 (1-5)</label>
-                      <select
-                        value={intensity}
-                        onChange={(e) => setIntensity(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white"
-                      >
-                        {[1, 2, 3, 4, 5].map((lvl) => (
-                          <option key={lvl} value={lvl}>
-                            Lv.{lvl}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
+
+                  {/* 自動計算ガイダンスバッジ */}
+                  <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800/80 text-[11px] text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span>
+                        METs推定: 約<strong>{caloriesBurned}</strong> kcal (体重{currentCalcWeight}kg基準)
+                      </span>
+                    </span>
+                    <span className="text-emerald-400 font-medium">不明時はこの値でOK</span>
+                  </div>
+
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">メモ</label>
+                    <label className="block text-xs text-slate-400 mb-1">メモ（重量・セット数・体感など）</label>
                     <input
                       type="text"
                       value={workoutMemo}
                       onChange={(e) => setWorkoutMemo(e.target.value)}
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
+                      placeholder="例: ダンベル24kg 3セット、呼吸安定"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-xs text-white placeholder-slate-500"
                     />
                   </div>
+
                   <button
                     type="submit"
-                    className="w-full py-3 rounded-2xl bg-rose-500 hover:bg-rose-400 text-slate-950 font-bold text-sm transition"
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-rose-500 to-amber-500 hover:from-rose-400 hover:to-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-rose-950/50 transition flex items-center justify-center gap-2"
                   >
-                    運動ログを保存
+                    <Check className="w-4 h-4" />
+                    運動ログを保存する
                   </button>
                 </form>
               )}
