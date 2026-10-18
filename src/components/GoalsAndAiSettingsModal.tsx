@@ -61,7 +61,7 @@ export function GoalsAndAiSettingsModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -71,10 +71,10 @@ export function GoalsAndAiSettingsModal({
           />
 
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
-            className="relative z-10 w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl max-h-[88vh] overflow-y-auto"
+            initial={{ y: 60, opacity: 0, scale: 0.97 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 60, opacity: 0, scale: 0.97 }}
+            className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-slate-800 p-5 sm:p-6 shadow-2xl max-h-[85dvh] overflow-y-auto overscroll-contain"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
               <div className="flex items-center gap-2.5">
@@ -122,7 +122,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, birthDate: e.target.value })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-mono font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-xs text-white font-mono font-bold"
                     />
                   </div>
 
@@ -138,7 +138,7 @@ export function GoalsAndAiSettingsModal({
                           gender: e.target.value as BiologicalSex,
                         })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-xs text-white font-bold"
                     >
                       <option value="male">男性 (Male)</option>
                       <option value="female">女性 (Female)</option>
@@ -156,7 +156,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, heightCm: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-xs text-white font-bold"
                     />
                   </div>
                 </div>
@@ -191,7 +191,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetWeightKg: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-white font-bold"
                     />
                   </div>
                   <div>
@@ -205,7 +205,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetBodyFatPct: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-white font-bold"
                     />
                   </div>
                   <div>
@@ -219,7 +219,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetSteps: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-white font-bold"
                     />
                   </div>
                   <div>
@@ -233,7 +233,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetSleepHours: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-white font-bold"
                     />
                   </div>
                 </div>
@@ -258,7 +258,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetCalories: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-white font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-white font-bold"
                     />
                   </div>
                   <div>
@@ -271,7 +271,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetProteinG: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-emerald-300 font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-emerald-300 font-bold"
                     />
                   </div>
                   <div>
@@ -284,7 +284,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetFatG: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-amber-300 font-bold"
                     />
                   </div>
                   <div>
@@ -297,7 +297,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, targetCarbsG: Number(e.target.value) })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-sky-300 font-bold"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-sky-300 font-bold"
                     />
                   </div>
                 </div>
@@ -325,7 +325,7 @@ export function GoalsAndAiSettingsModal({
                         setForm({ ...form, geminiApiKey: e.target.value })
                       }
                       placeholder="未設定時はローカルAI辞書推定に自動フォールバック"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-xs text-white font-mono"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-base sm:text-xs text-white font-mono"
                     />
                   </div>
                   <div>
@@ -337,7 +337,7 @@ export function GoalsAndAiSettingsModal({
                       onChange={(e) =>
                         setForm({ ...form, geminiModel: e.target.value })
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-xs text-white"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-xs text-white"
                     >
                       <option value="auto">自動選択 (推奨・最新Flash)</option>
                       <option value="gemini-2.5-flash">gemini-2.5-flash</option>

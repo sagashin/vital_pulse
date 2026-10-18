@@ -610,7 +610,7 @@ export function QuickLogModal({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 60, opacity: 0, scale: 0.97 }}
             transition={{ type: "spring", damping: 26, stiffness: 320 }}
-            className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-slate-800/90 shadow-2xl overflow-hidden"
+            className="relative z-10 w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-slate-900 border border-slate-800/90 shadow-2xl overflow-hidden max-h-[85dvh] overscroll-contain flex flex-col"
           >
             {/* Header with Date Selector */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-slate-800/80">
@@ -626,7 +626,7 @@ export function QuickLogModal({
                       type="date"
                       value={recordDate}
                       onChange={(e) => setRecordDate(e.target.value)}
-                      className="bg-transparent text-xs font-mono font-bold text-white focus:outline-none cursor-pointer"
+                      className="bg-transparent text-base sm:text-xs font-mono font-bold text-white focus:outline-none cursor-pointer"
                     />
                   </div>
                 </div>
@@ -671,7 +671,7 @@ export function QuickLogModal({
             </div>
 
             {/* Body Content */}
-            <div className="p-6 max-h-[75vh] overflow-y-auto">
+            <div className="p-6 flex-1 overflow-y-auto overscroll-contain">
               {activeTab === "ai" && (
                 <div className="space-y-4">
                   <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-200 leading-relaxed">
@@ -684,7 +684,7 @@ export function QuickLogModal({
                       value={smartText}
                       onChange={(e) => handleSmartTextChange(e.target.value)}
                       placeholder="例: 昼ごはんに鶏むねサラダと玄米、体重67.1kg、体脂肪17.0%、ランニング30分"
-                      className="w-full rounded-2xl bg-slate-950/90 border border-slate-800 p-4 pr-14 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
+                      className="w-full rounded-2xl bg-slate-950/90 border border-slate-800 p-4 pr-14 text-base sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60"
                     />
                     <button
                       type="button"
@@ -763,7 +763,7 @@ export function QuickLogModal({
                       value={photoHint}
                       onChange={(e) => setPhotoHint(e.target.value)}
                       placeholder="例: 鶏むね肉180g、玄米少なめ、ドレッシング別添え"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-xs text-white"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2 text-base sm:text-xs text-white"
                     />
                   </div>
 
@@ -833,7 +833,7 @@ export function QuickLogModal({
                           onChange={(e) =>
                             setPhotoAnalysis({ ...photoAnalysis, description: e.target.value })
                           }
-                          className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-sm text-white font-bold"
+                          className="w-full rounded-xl bg-slate-900 border border-slate-700 px-3 py-2 text-base sm:text-sm text-white font-bold"
                         />
                       </div>
 
@@ -849,7 +849,7 @@ export function QuickLogModal({
                                 calories: Number(e.target.value) || 0,
                               })
                             }
-                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-amber-300 font-bold"
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-base sm:text-xs text-amber-300 font-bold"
                           />
                         </div>
                         <div>
@@ -864,7 +864,7 @@ export function QuickLogModal({
                                 protein: Number(e.target.value) || 0,
                               })
                             }
-                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-emerald-400 font-bold"
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-base sm:text-xs text-emerald-400 font-bold"
                           />
                         </div>
                         <div>
@@ -879,7 +879,7 @@ export function QuickLogModal({
                                 fat: Number(e.target.value) || 0,
                               })
                             }
-                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-amber-400 font-bold"
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-base sm:text-xs text-amber-400 font-bold"
                           />
                         </div>
                         <div>
@@ -894,7 +894,7 @@ export function QuickLogModal({
                                 carbs: Number(e.target.value) || 0,
                               })
                             }
-                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs text-sky-400 font-bold"
+                            className="w-full rounded-xl bg-slate-900 border border-slate-700 px-2 py-1.5 text-base sm:text-xs text-sky-400 font-bold"
                           />
                         </div>
                       </div>
@@ -966,7 +966,7 @@ export function QuickLogModal({
                       value={mealDesc}
                       onChange={(e) => handleMealDescChange(e.target.value)}
                       placeholder="例: 納豆ご飯と焼き鮭と味噌汁 / カレーライスとサラダ"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:border-amber-400/70 focus:outline-none"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white focus:border-amber-400/70 focus:outline-none"
                     />
                     {mealEstBadge && (
                       <p className="mt-1.5 text-[11px] text-emerald-300 font-medium">
@@ -982,7 +982,7 @@ export function QuickLogModal({
                         type="number"
                         value={calories}
                         onChange={(e) => setCalories(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-amber-300 font-bold"
                       />
                     </div>
                     <div>
@@ -992,7 +992,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={protein}
                         onChange={(e) => setProtein(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-emerald-300 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-emerald-300 font-bold"
                       />
                     </div>
                     <div>
@@ -1002,7 +1002,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={fat}
                         onChange={(e) => setFat(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-amber-300 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-amber-300 font-bold"
                       />
                     </div>
                     <div>
@@ -1012,7 +1012,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={carbs}
                         onChange={(e) => setCarbs(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-sm text-sky-300 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3 py-2 text-base sm:text-sm text-sky-300 font-bold"
                       />
                     </div>
                   </div>
@@ -1072,7 +1072,7 @@ export function QuickLogModal({
                     <select
                       value={selectedPresetName}
                       onChange={(e) => handleSelectWorkoutPreset(e.target.value)}
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
                     >
                       {Array.from(new Set(WORKOUT_TYPE_PRESETS.map((p) => p.category))).map((cat) => (
                         <optgroup key={cat} label={`── ${cat} ──`} className="bg-slate-900 text-slate-300">
@@ -1098,7 +1098,7 @@ export function QuickLogModal({
                           }
                         }}
                         placeholder="種目の詳細（例: ベンチプレス＆ダンベルロウ、5kmランニング）"
-                        className="w-full rounded-xl bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500/50"
+                        className="w-full rounded-xl bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 text-base sm:text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500/50"
                       />
                     </div>
                   </div>
@@ -1113,7 +1113,7 @@ export function QuickLogModal({
                       onChange={(e) =>
                         handleIntensityChange(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)
                       }
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-xs text-white focus:outline-none focus:border-rose-500/70 cursor-pointer"
                     >
                       {INTENSITY_PRESETS.map((opt) => (
                         <option key={opt.value} value={opt.value} className="bg-slate-950 text-white">
@@ -1146,7 +1146,7 @@ export function QuickLogModal({
                         min="1"
                         value={durationMin}
                         onChange={(e) => handleDurationChange(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white font-bold"
                       />
                     </div>
 
@@ -1176,7 +1176,7 @@ export function QuickLogModal({
                         min="0"
                         value={caloriesBurned}
                         onChange={(e) => setCaloriesBurned(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-rose-400 font-bold"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-rose-400 font-bold"
                       />
                     </div>
                   </div>
@@ -1199,7 +1199,7 @@ export function QuickLogModal({
                       value={workoutMemo}
                       onChange={(e) => setWorkoutMemo(e.target.value)}
                       placeholder="例: ダンベル24kg 3セット、呼吸安定"
-                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-xs text-white placeholder-slate-500"
+                      className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-xs text-white placeholder-slate-500"
                     />
                   </div>
 
@@ -1224,7 +1224,7 @@ export function QuickLogModal({
                         type="time"
                         value={bedTime}
                         onChange={(e) => handleBedTimeChange(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
                       />
                     </div>
                     <div>
@@ -1235,7 +1235,7 @@ export function QuickLogModal({
                         type="time"
                         value={wakeTime}
                         onChange={(e) => handleWakeTimeChange(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white font-mono font-bold focus:border-indigo-400 focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1252,7 +1252,7 @@ export function QuickLogModal({
                         step="0.1"
                         value={sleepHours}
                         onChange={(e) => setSleepHours(e.target.value)}
-                        className="w-full rounded-xl bg-slate-950 border border-indigo-500/40 px-3.5 py-2.5 text-sm text-indigo-300 font-extrabold"
+                        className="w-full rounded-xl bg-slate-950 border border-indigo-500/40 px-3.5 py-2.5 text-base sm:text-sm text-indigo-300 font-extrabold"
                       />
                     </div>
                     <div>
@@ -1260,7 +1260,7 @@ export function QuickLogModal({
                       <select
                         value={sleepQuality}
                         onChange={(e) => setSleepQuality(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}
-                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-sm text-white"
+                        className="w-full rounded-xl bg-slate-950 border border-slate-800 px-3.5 py-2.5 text-base sm:text-sm text-white"
                       >
                         <option value={5}>5 - 最高に深い睡眠</option>
                         <option value={4}>4 - 良好な回復</option>

@@ -7,10 +7,28 @@
   --foreground: #f8fafc;
 }
 
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* モバイル端末でinput/select/textareaフォーカス時に画面が勝手に拡大されるのを防ぐ（16pxルール） */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* Custom subtle scrollbars for dark mode */

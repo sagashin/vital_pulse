@@ -364,7 +364,7 @@ export default function HealthDashboardPage() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent text-xs font-mono font-semibold text-slate-200 px-2 focus:outline-none"
+                className="bg-transparent text-base sm:text-xs font-mono font-semibold text-slate-200 px-2 focus:outline-none cursor-pointer"
               />
               <button
                 type="button"

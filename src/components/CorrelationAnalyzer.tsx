@@ -191,7 +191,7 @@ export function CorrelationAnalyzer({
             <select
               value={xAxisKey}
               onChange={(e) => setXAxisKey(e.target.value as MetricKey)}
-              className="bg-transparent text-slate-100 font-medium focus:outline-none"
+              className="bg-transparent text-base sm:text-xs text-slate-100 font-medium focus:outline-none"
             >
               {Object.entries(METRIC_OPTIONS).map(([k, v]) => (
                 <option key={k} value={k} className="bg-slate-900 text-white">
@@ -208,7 +208,7 @@ export function CorrelationAnalyzer({
             <select
               value={yAxisKey}
               onChange={(e) => setYAxisKey(e.target.value as MetricKey)}
-              className="bg-transparent text-slate-100 font-medium focus:outline-none"
+              className="bg-transparent text-base sm:text-xs text-slate-100 font-medium focus:outline-none"
             >
               {Object.entries(METRIC_OPTIONS).map(([k, v]) => (
                 <option key={k} value={k} className="bg-slate-900 text-white">
