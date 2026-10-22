@@ -84,11 +84,11 @@ async function discoverAvailableGeminiModels(apiKey: string): Promise<string[]> 
       )
       .map((m: { name: string }) => m.name.replace(/^models\//, ""));
 
-    // 優先度順にソート（2.5-flash -> 2.5-flash-lite -> 2.0-flash）
+    // 優先度順にソート（3.8-flash -> 3.5-flash -> 3.5-flash-lite）
     const priorityOrder = [
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.0-flash",
+      "gemini-3.8-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
     ];
 
     generateModels.sort((a, b) => {
@@ -136,9 +136,9 @@ export async function analyzeFoodPhotoWithGemini(params: {
     const discovered = await discoverAvailableGeminiModels(trimmedKey);
 
     const staticFallbacks = [
-      "gemini-2.5-flash",
-      "gemini-2.5-flash-lite",
-      "gemini-2.0-flash",
+      "gemini-3.8-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
     ];
 
     const preferredFirst =
